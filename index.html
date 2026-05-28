@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Duet Vocabulary Mission</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Cooperative word practice</p>
+        <h1>Duet Vocabulary Mission</h1>
+      </div>
+      <button class="text-button" id="rules-open" type="button">How to play</button>
+    </header>
+
+    <main class="shell">
+      <section class="panel setup" id="setup-view">
+        <div class="setup-copy">
+          <p class="eyebrow">Build a mission</p>
+          <h2>Use your own vocabulary</h2>
+          <p>
+            Paste vocabulary or upload a <code>.txt</code> or <code>.csv</code> file.
+            The board always needs 25 unique entries. Missing entries are randomly filled
+            from a built-in pool of 100 lower-intermediate and intermediate English words.
+          </p>
+        </div>
+
+        <form id="setup-form" class="setup-form">
+          <label class="field">
+            <span>Vocabulary list</span>
+            <textarea id="vocab-input" rows="10" placeholder="adventure&#10;borrow&#10;celebrate&#10;..."></textarea>
+          </label>
+          <div class="upload-row">
+            <label class="upload">
+              <span>Upload vocabulary file</span>
+              <input id="vocab-file" type="file" accept=".txt,.csv,text/plain,text/csv">
+            </label>
+            <p id="word-count" class="quiet">No custom entries yet. The learning pool will supply all 25 words.</p>
+          </div>
+          <fieldset class="mode-switch" aria-label="Device mode">
+            <legend>Device mode</legend>
+            <label>
+              <input type="radio" name="device-mode" value="one" checked>
+              <span>One device</span>
+            </label>
+            <label>
+              <input type="radio" name="device-mode" value="multi">
+              <span>Multi-device</span>
+            </label>
+          </fieldset>
+          <div class="options">
+            <label class="field compact">
+              <span>Timer tokens</span>
+              <select id="timer-count">
+                <option value="9" selected>9 - Standard</option>
+                <option value="10">10 - Relaxed</option>
+                <option value="11">11 - Classroom practice</option>
+              </select>
+            </label>
+            <label class="field compact">
+              <span>First clue-giver</span>
+              <select id="first-giver">
+                <option value="A" selected>Side A</option>
+                <option value="B">Side B</option>
+              </select>
+            </label>
+          </div>
+          <button class="primary" type="submit">Create 5 x 5 Mission</button>
+        </form>
+      </section>
+
+      <section class="game hidden" id="game-view" aria-live="polite">
+        <div class="dashboard">
+          <section class="panel status">
+            <div class="status-row">
+              <div>
+                <p class="eyebrow">Current phase</p>
+                <h2 id="turn-heading">Side A gives a clue</h2>
+                <p id="turn-guidance"></p>
+              </div>
+              <div id="phase-pill" class="phase-pill">Clue</div>
+            </div>
+            <div class="scores">
+              <div><strong id="agents-found">0</strong><span>of 15 agents</span></div>
+              <div><strong id="tokens-left">9</strong><span>turns left</span></div>
+              <div><strong id="custom-used">0</strong><span>custom words</span></div>
+            </div>
+          </section>
+
+          <section class="panel controls">
+            <div class="key-actions">
+              <div>
+                <p class="eyebrow">Private keys</p>
+                <p class="key-note">Use a paper screen between players.</p>
+              </div>
+              <button class="secondary" id="prepare-keys" type="button">Set up shared keys</button>
+            </div>
+
+            <div id="multi-device-keys" class="multi-device-keys hidden">
+              <div>
+                <p class="eyebrow">Phone keys</p>
+                <p class="key-note">Scan each QR code with the matching player's phone.</p>
+              </div>
+              <div class="qr-pair">
+                <article class="qr-card">
+                  <h3>Side A</h3>
+                  <div id="qr-a" class="qr-code" role="img" aria-label="QR code for Side A key"></div>
+                  <a id="qr-link-a" target="_blank" rel="noreferrer">Open Side A key</a>
+                </article>
+                <article class="qr-card">
+                  <h3>Side B</h3>
+                  <div id="qr-b" class="qr-code" role="img" aria-label="QR code for Side B key"></div>
+                  <a id="qr-link-b" target="_blank" rel="noreferrer">Open Side B key</a>
+                </article>
+              </div>
+              <p class="qr-note">Phones must be able to reach this page's web address. Localhost works only on this device.</p>
+            </div>
+
+            <form id="clue-form" class="clue-form">
+              <label class="field">
+                <span>Clue word</span>
+                <input id="clue-word" type="text" maxlength="40" autocomplete="off">
+              </label>
+              <label class="field number-field">
+                <span>Number</span>
+                <input id="clue-number" type="number" min="0" max="9" placeholder="1">
+              </label>
+              <button class="primary" id="begin-guesses" type="submit">Begin guesses</button>
+            </form>
+
+            <div id="guess-actions" class="guess-actions hidden">
+              <p id="active-clue" class="active-clue"></p>
+              <button class="secondary" id="end-turn" type="button" disabled>End turn</button>
+            </div>
+
+            <div id="sudden-controls" class="sudden-controls hidden">
+              <p>No more clues. Choose who is making each sudden-death guess.</p>
+              <label class="field compact">
+                <span>Guessing player</span>
+                <select id="sudden-guesser">
+                  <option value="A">Side A</option>
+                  <option value="B">Side B</option>
+                </select>
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel board-panel">
+          <div class="board-head">
+            <p id="board-source"></p>
+            <div class="board-buttons">
+              <button class="text-button" id="restart" type="button">New mission</button>
+              <button class="text-button" id="back-setup" type="button">Edit vocabulary</button>
+            </div>
+          </div>
+          <div id="board" class="board" aria-label="Word grid"></div>
+          <ol id="mission-log" class="mission-log" aria-label="Mission events"></ol>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="key-dialog" class="key-dialog">
+      <div class="key-toolbar">
+        <p class="eyebrow">Shared tabletop key</p>
+        <button id="hide-key" class="text-button" type="button">Return to game</button>
+      </div>
+      <section id="key-align-step" class="key-align-step">
+        <div class="divider-line" aria-hidden="true"></div>
+        <div class="align-card">
+          <p class="eyebrow">Step 1</p>
+          <h2>Align your paper screen</h2>
+          <p>
+            Place a folded piece of paper vertically along the center line.
+            Keep it in place, then Side A can reveal both private keys.
+          </p>
+          <button id="reveal-keys" class="primary" type="button">Step 2: Reveal keys</button>
+        </div>
+      </section>
+      <section id="key-reveal-step" class="key-reveal-step hidden" aria-label="Private key sides">
+        <div class="key-half side-a">
+          <div class="key-seat">
+            <p class="eyebrow">Player view</p>
+            <h2>Side A key</h2>
+            <p class="privacy">Keep the paper screen in place.</p>
+            <div id="key-grid-a" class="key-grid"></div>
+            <div class="legend">
+              <span class="agent">Agent</span>
+              <span class="bystander">Bystander</span>
+              <span class="assassin">Assassin</span>
+            </div>
+          </div>
+        </div>
+        <div class="key-half side-b">
+          <div class="key-seat">
+            <p class="eyebrow">Player view</p>
+            <h2>Side B key</h2>
+            <p class="privacy">Keep the paper screen in place.</p>
+            <div id="key-grid-b" class="key-grid"></div>
+            <div class="legend">
+              <span class="agent">Agent</span>
+              <span class="bystander">Bystander</span>
+              <span class="assassin">Assassin</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </dialog>
+
+    <main id="phone-key-view" class="phone-key-view hidden">
+      <section class="phone-key-card">
+        <p class="eyebrow">Private phone key</p>
+        <h1 id="phone-key-title">Side key</h1>
+        <p class="privacy">Keep this screen hidden from the other player.</p>
+        <div id="phone-key-grid" class="key-grid phone-grid"></div>
+        <div class="legend">
+          <span class="agent">Contact</span>
+          <span class="bystander">Bystander</span>
+          <span class="assassin">Assassin</span>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="rules-dialog" class="rules-dialog">
+      <div class="dialog-head">
+        <h2>Rules summary</h2>
+        <button id="rules-close" class="text-button" type="button">Close</button>
+      </div>
+      <ul>
+        <li>There are 25 words and 15 agents that both players must contact together.</li>
+        <li>Place a paper screen on the center line, then reveal both opposite-facing key sides for players seated across from each other.</li>
+        <li>In multi-device mode, scan Side A and Side B QR codes to show private keys on separate phones.</li>
+        <li>Each clue-giver privately sees nine green agents and three black assassins on their key side.</li>
+        <li>Give a one-word clue and a number. Your partner guesses words linked to that clue.</li>
+        <li>A green guess is contacted and guessing may continue. A bystander ends the turn. An assassin loses immediately.</li>
+        <li>You spend one timer token at the end of each normal turn. After the last token, sudden death begins.</li>
+        <li>In sudden death no clues are given: contact all remaining agents, but any non-agent guess loses.</li>
+      </ul>
+      <p class="rules-source">
+        Based on the standard cooperative rules in the
+        <a href="https://filemanager.czechgames.com/storage/files/codenames-duet/rules/codenames-duet-rules-en.pdf" target="_blank" rel="noreferrer">official Codenames: Duet rulebook</a>.
+      </p>
+    </dialog>
+
+    <div id="result-banner" class="result-banner hidden" role="status">
+      <span id="result-message"></span>
+      <button id="confirm-bystander" class="banner-button hidden" type="button">Confirm</button>
+    </div>
+    <script src="node_modules/qrcode-generator/qrcode.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
