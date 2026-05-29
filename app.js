@@ -24,9 +24,14 @@
     vocabInput: document.querySelector("#vocab-input"),
     vocabFile: document.querySelector("#vocab-file"),
     wordCount: document.querySelector("#word-count"),
+    gameModes: document.querySelectorAll("input[name='game-mode']"),
+    coopSettings: document.querySelector("#coop-settings"),
+    competeSettings: document.querySelector("#compete-settings"),
     deviceModes: document.querySelectorAll("input[name='device-mode']"),
+    competeDeviceModes: document.querySelectorAll("input[name='compete-device-mode']"),
     timerCount: document.querySelector("#timer-count"),
     firstGiver: document.querySelector("#first-giver"),
+    startingTeam: document.querySelector("#starting-team"),
     board: document.querySelector("#board"),
     boardSource: document.querySelector("#board-source"),
     turnHeading: document.querySelector("#turn-heading"),
@@ -52,11 +57,20 @@
     qrB: document.querySelector("#qr-b"),
     qrLinkA: document.querySelector("#qr-link-a"),
     qrLinkB: document.querySelector("#qr-link-b"),
+    qrToggle: document.querySelector("#qr-toggle"),
+    qrCollapseContent: document.querySelector("#qr-collapse-content"),
     keyDialog: document.querySelector("#key-dialog"),
     keyAlignStep: document.querySelector("#key-align-step"),
     keyRevealStep: document.querySelector("#key-reveal-step"),
     keyGridA: document.querySelector("#key-grid-a"),
     keyGridB: document.querySelector("#key-grid-b"),
+    competitiveKeyTimer: document.querySelector("#competitive-key-timer"),
+    timerDisplay: document.querySelector("#timer-display"),
+    timerStatus: document.querySelector("#timer-status"),
+    timerMinus: document.querySelector("#timer-minus"),
+    timerPlus: document.querySelector("#timer-plus"),
+    timerPause: document.querySelector("#timer-pause"),
+    timerReset: document.querySelector("#timer-reset"),
     rulesDialog: document.querySelector("#rules-dialog"),
     masthead: document.querySelector(".masthead"),
     shell: document.querySelector(".shell"),
@@ -66,6 +80,11 @@
   };
 
   let state = null;
+  let keyTimerId = null;
+  let keyTimerDuration = 60;
+  let keyTimerRemaining = 60;
+  let keyTimerPaused = true;
+  let qrCodesCollapsed = false;
 
   function shuffle(items) {
     const copy = [...items];
@@ -129,6 +148,17 @@
     return { A: sideA, B: sideB };
   }
 
+  function createCompetitiveKey(startingTeam) {
+    const otherTeam = startingTeam === "red" ? "blue" : "red";
+    const roles = [
+      ...Array(9).fill(startingTeam),
+      ...Array(8).fill(otherTeam),
+      "assassin",
+      ...Array(7).fill("bystander")
+    ];
+    return shuffle(roles);
+  }
+
   function otherSide(side) {
     return side === "A" ? "B" : "A";
   }
@@ -138,20 +168,42 @@
     return selected ? selected.value : "one";
   }
 
+  function selectedCompeteDeviceMode() {
+    const selected = [...dom.competeDeviceModes].find((input) => input.checked);
+    return selected ? selected.value : "one";
+  }
+
+  function selectedGameMode() {
+    const selected = [...dom.gameModes].find((input) => input.checked);
+    return selected ? selected.value : "coop";
+  }
+
+  function updateModeSettings() {
+    const compete = selectedGameMode() === "compete";
+    dom.coopSettings.classList.toggle("hidden", compete);
+    dom.competeSettings.classList.toggle("hidden", !compete);
+  }
+
   function buildMission(customEntries) {
     const selectedCustom = shuffle(customEntries).slice(0, 25);
     const customKeys = new Set(selectedCustom.map((word) => word.toLocaleLowerCase()));
     const fillers = shuffle(WORD_POOL.filter((word) => !customKeys.has(word.toLocaleLowerCase())))
       .slice(0, 25 - selectedCustom.length);
     const board = shuffle([...selectedCustom, ...fillers]);
+    const mode = selectedGameMode();
     const timerLimit = Number(dom.timerCount.value);
 
     state = {
+      mode,
       board,
       customCount: selectedCustom.length,
       poolCount: fillers.length,
-      keys: createKey(),
+      keys: mode === "coop" ? createKey() : null,
+      competitiveKey: mode === "compete" ? createCompetitiveKey(dom.startingTeam.value) : null,
+      startingTeam: mode === "compete" ? dom.startingTeam.value : null,
+      activeTeam: mode === "compete" ? dom.startingTeam.value : null,
       contacted: new Set(),
+      revealed: new Set(),
       bystanders: {
         A: new Set(),
         B: new Set()
@@ -163,8 +215,10 @@
       phase: "clue",
       clue: null,
       hasGuessed: false,
+      guessesThisTurn: 0,
+      guessLimit: null,
       pendingBystander: null,
-      deviceMode: selectedDeviceMode(),
+      deviceMode: mode === "coop" ? selectedDeviceMode() : selectedCompeteDeviceMode(),
       log: []
     };
   }
@@ -191,6 +245,12 @@
   }
 
   function roleCode(role) {
+    if (role === "red") {
+      return "r";
+    }
+    if (role === "blue") {
+      return "u";
+    }
     if (role === "agent") {
       return "c";
     }
@@ -201,6 +261,12 @@
   }
 
   function roleFromCode(code) {
+    if (code === "r") {
+      return "red";
+    }
+    if (code === "u") {
+      return "blue";
+    }
     if (code === "c") {
       return "agent";
     }
@@ -211,10 +277,12 @@
   }
 
   function phoneKeyUrl(side) {
+    const compete = state.mode === "compete";
     const payload = {
-      side,
+      mode: state.mode,
+      side: compete ? "spymaster" : side,
       words: state.board,
-      roles: state.keys[side].map(roleCode).join("")
+      roles: compete ? state.competitiveKey.map(roleCode).join("") : state.keys[side].map(roleCode).join("")
     };
     const url = new URL(window.location.href);
     url.search = "";
@@ -245,19 +313,53 @@
     }
   }
 
+  function renderQrCollapseState() {
+    dom.qrCollapseContent.classList.toggle("hidden", qrCodesCollapsed);
+    dom.qrToggle.setAttribute("aria-expanded", String(!qrCodesCollapsed));
+    dom.qrToggle.textContent = qrCodesCollapsed ? "Show QR codes" : "Hide QR codes";
+  }
+
+  function toggleQrCodes() {
+    qrCodesCollapsed = !qrCodesCollapsed;
+    renderQrCollapseState();
+  }
+
   function renderMultiDeviceKeys() {
     if (!state || state.deviceMode !== "multi") {
       dom.multiDeviceKeys.classList.add("hidden");
       return;
     }
+    if (state.mode === "compete") {
+      const keyUrl = phoneKeyUrl("spymaster");
+      renderQrCode(dom.qrA, keyUrl);
+      dom.qrA.closest(".qr-card").classList.add("wide");
+      dom.qrA.closest(".qr-card").querySelector("h3").textContent = "Spymaster key";
+      dom.qrLinkA.href = keyUrl;
+      dom.qrLinkA.textContent = "Open spymaster key";
+      dom.qrB.closest(".qr-card").classList.add("hidden");
+      dom.multiDeviceKeys.querySelector(".eyebrow").textContent = "Phone key";
+      dom.multiDeviceKeys.querySelector(".key-note").textContent = "Scan this QR code on a spymaster phone.";
+      dom.multiDeviceKeys.querySelector(".qr-note").textContent = "The phone must be able to reach this page's web address. Localhost works only on this device.";
+      renderQrCollapseState();
+      dom.multiDeviceKeys.classList.remove("hidden");
+      return;
+    }
     const sideAUrl = phoneKeyUrl("A");
     const sideBUrl = phoneKeyUrl("B");
+    dom.qrA.closest(".qr-card").classList.remove("wide");
+    dom.qrB.closest(".qr-card").classList.remove("hidden");
+    dom.qrA.closest(".qr-card").querySelector("h3").textContent = "Side A";
+    dom.qrB.closest(".qr-card").querySelector("h3").textContent = "Side B";
     renderQrCode(dom.qrA, sideAUrl);
     renderQrCode(dom.qrB, sideBUrl);
     dom.qrLinkA.href = sideAUrl;
     dom.qrLinkB.href = sideBUrl;
     dom.qrLinkA.textContent = "Open Side A key";
     dom.qrLinkB.textContent = "Open Side B key";
+    dom.multiDeviceKeys.querySelector(".eyebrow").textContent = "Phone keys";
+    dom.multiDeviceKeys.querySelector(".key-note").textContent = "Scan each QR code with the matching player's phone.";
+    dom.multiDeviceKeys.querySelector(".qr-note").textContent = "Phones must be able to reach this page's web address. Localhost works only on this device.";
+    renderQrCollapseState();
     dom.multiDeviceKeys.classList.remove("hidden");
   }
 
@@ -281,12 +383,17 @@
   }
 
   function renderBoard() {
-    const visibleBystanders = state.bystanders[state.clueGiver] || new Set();
+    const visibleBystanders = state.mode === "coop" ? state.bystanders[state.clueGiver] || new Set() : new Set();
     dom.board.innerHTML = "";
     state.board.forEach((word, index) => {
       const card = document.createElement("button");
       const classes = ["word-card"];
-      if (state.contacted.has(index)) {
+      const competitiveRole = state.mode === "compete" && state.revealed.has(index)
+        ? state.competitiveKey[index]
+        : null;
+      if (state.mode === "compete" && competitiveRole) {
+        classes.push(`revealed-${competitiveRole}`);
+      } else if (state.contacted.has(index)) {
         classes.push("contacted");
       } else if (state.revealedAssassin === index) {
         classes.push("revealed-assassin");
@@ -297,10 +404,22 @@
       card.type = "button";
       card.dataset.index = String(index);
       card.setAttribute("aria-label", word);
-      card.disabled = Boolean(state.pendingBystander) || state.contacted.has(index) || ["clue", "won", "lost"].includes(state.phase);
+      card.disabled = Boolean(state.pendingBystander) || state.contacted.has(index) || state.revealed.has(index) || ["clue", "won", "lost"].includes(state.phase);
       card.textContent = word;
 
-      if (state.contacted.has(index)) {
+      if (competitiveRole === "red" || competitiveRole === "blue") {
+        const mark = document.createElement("small");
+        mark.textContent = competitiveRole;
+        card.append(mark);
+      } else if (competitiveRole === "bystander") {
+        const mark = document.createElement("small");
+        mark.textContent = "bystander";
+        card.append(mark);
+      } else if (competitiveRole === "assassin") {
+        const mark = document.createElement("small");
+        mark.textContent = "assassin";
+        card.append(mark);
+      } else if (state.contacted.has(index)) {
         const mark = document.createElement("small");
         mark.textContent = "contacted";
         card.append(mark);
@@ -327,27 +446,57 @@
     });
   }
 
+  function competitiveFound(team) {
+    return [...state.revealed].filter((index) => state.competitiveKey[index] === team).length;
+  }
+
+  function teamName(team) {
+    return team === "red" ? "Red" : "Blue";
+  }
+
+  function otherTeam(team) {
+    return team === "red" ? "blue" : "red";
+  }
+
   function render() {
     const guesser = otherSide(state.clueGiver);
     const normalGuess = state.phase === "guess";
     const over = state.phase === "won" || state.phase === "lost";
-    dom.agentsFound.textContent = String(state.contacted.size);
-    dom.tokensLeft.textContent = String(state.tokens);
+    const compete = state.mode === "compete";
+    if (compete) {
+      dom.agentsFound.textContent = `${competitiveFound("red")}/${state.startingTeam === "red" ? 9 : 8}`;
+      dom.agentsFound.nextElementSibling.textContent = "red agents";
+      dom.tokensLeft.textContent = `${competitiveFound("blue")}/${state.startingTeam === "blue" ? 9 : 8}`;
+      dom.tokensLeft.nextElementSibling.textContent = "blue agents";
+    } else {
+      dom.agentsFound.textContent = String(state.contacted.size);
+      dom.agentsFound.nextElementSibling.textContent = "of 15 agents";
+      dom.tokensLeft.textContent = String(state.tokens);
+      dom.tokensLeft.nextElementSibling.textContent = "turns left";
+    }
     dom.customUsed.textContent = String(state.customCount);
     dom.boardSource.textContent = `${state.customCount} custom word${state.customCount === 1 ? "" : "s"} and ${state.poolCount} learning-pool word${state.poolCount === 1 ? "" : "s"} on this board.`;
     dom.clueForm.classList.toggle("hidden", state.phase !== "clue");
     dom.guessActions.classList.toggle("hidden", !normalGuess);
-    dom.suddenControls.classList.toggle("hidden", state.phase !== "sudden");
-    document.querySelector(".key-actions").classList.toggle("hidden", state.deviceMode === "multi");
+    dom.suddenControls.classList.toggle("hidden", compete || state.phase !== "sudden");
+    const keyActions = document.querySelector(".key-actions");
+    keyActions.classList.toggle("hidden", state.deviceMode === "multi");
+    keyActions.querySelector(".eyebrow").textContent = compete ? "Spymaster key" : "Private keys";
+    keyActions.querySelector(".key-note").textContent = compete ? "Reveal only to spymasters." : "Use a paper screen between players.";
+    keyActions.querySelector("button").textContent = compete ? "Show shared key" : "Set up shared keys";
     renderMultiDeviceKeys();
 
     if (state.phase === "clue") {
-      dom.turnHeading.textContent = `Side ${state.clueGiver} gives a clue`;
-      dom.turnGuidance.textContent = "Reveal the separated shared keys when players need their private information.";
+      dom.turnHeading.textContent = compete ? `${teamName(state.activeTeam)} spymaster gives a clue` : `Side ${state.clueGiver} gives a clue`;
+      dom.turnGuidance.textContent = compete
+        ? "Open the shared spymaster key when both spymasters need the board map."
+        : "Reveal the separated shared keys when players need their private information.";
       dom.phasePill.textContent = "Clue";
     } else if (normalGuess) {
-      dom.turnHeading.textContent = `Side ${guesser} guesses`;
-      dom.turnGuidance.textContent = "Select words on the board, or end the turn after at least one guess.";
+      dom.turnHeading.textContent = compete ? `${teamName(state.activeTeam)} operatives guess` : `Side ${guesser} guesses`;
+      dom.turnGuidance.textContent = compete
+        ? "Select team words, or end the turn after at least one guess."
+        : "Select words on the board, or end the turn after at least one guess.";
       dom.phasePill.textContent = "Guess";
       dom.activeClue.textContent = state.clue.label;
       dom.endTurn.disabled = !state.hasGuessed || Boolean(state.pendingBystander);
@@ -357,9 +506,11 @@
       dom.phasePill.textContent = "Sudden death";
     } else {
       dom.turnHeading.textContent = state.phase === "won" ? "Mission complete" : "Mission failed";
-      dom.turnGuidance.textContent = state.phase === "won"
-        ? "All 15 agents were contacted."
-        : "Start a new mission to try again.";
+      dom.turnGuidance.textContent = compete
+        ? "Start a new game from the vocabulary screen."
+        : state.phase === "won"
+          ? "All 15 agents were contacted."
+          : "Start a new mission to try again.";
       dom.phasePill.textContent = state.phase === "won" ? "Success" : "Game over";
     }
     dom.endTurn.disabled = !state.hasGuessed || !normalGuess || Boolean(state.pendingBystander);
@@ -394,11 +545,35 @@
     };
     state.phase = "guess";
     state.hasGuessed = false;
-    logEvent(`Side ${state.clueGiver}: ${state.clue.label}`);
+    state.guessesThisTurn = 0;
+    state.guessLimit = state.mode === "compete" ? competitiveGuessLimit(dom.clueNumber.value.trim()) : null;
+    logEvent(state.mode === "compete" ? `${teamName(state.activeTeam)}: ${state.clue.label}` : `Side ${state.clueGiver}: ${state.clue.label}`);
     render();
   }
 
+  function competitiveGuessLimit(numberText) {
+    if (numberText === "0") {
+      return Infinity;
+    }
+    const number = Number.parseInt(numberText, 10);
+    return Number.isFinite(number) && number > 0 ? number + 1 : Infinity;
+  }
+
   function spendTurn(reason) {
+    if (state.mode === "compete") {
+      if (reason) {
+        logEvent(reason);
+      }
+      state.activeTeam = otherTeam(state.activeTeam);
+      state.phase = "clue";
+      state.clue = null;
+      state.hasGuessed = false;
+      state.guessesThisTurn = 0;
+      state.guessLimit = null;
+      dom.clueWord.value = "";
+      dom.clueNumber.value = "";
+      return;
+    }
     state.tokens -= 1;
     if (reason) {
       logEvent(reason);
@@ -418,8 +593,13 @@
 
   function succeed() {
     state.phase = "won";
-    logEvent("All 15 agents contacted.");
-    showBanner("Mission complete: all 15 agents contacted.");
+    if (state.mode === "compete") {
+      logEvent(`${teamName(state.activeTeam)} contacted all agents.`);
+      showBanner(`${teamName(state.activeTeam)} team wins.`);
+    } else {
+      logEvent("All 15 agents contacted.");
+      showBanner("Mission complete: all 15 agents contacted.");
+    }
   }
 
   function fail(text, revealedAssassin = null) {
@@ -446,6 +626,10 @@
 
   function makeGuess(index) {
     if (!state || state.pendingBystander || !["guess", "sudden"].includes(state.phase)) {
+      return;
+    }
+    if (state.mode === "compete") {
+      makeCompetitiveGuess(index);
       return;
     }
     const sudden = state.phase === "sudden";
@@ -482,6 +666,42 @@
     render();
   }
 
+  function makeCompetitiveGuess(index) {
+    if (state.revealed.has(index)) {
+      return;
+    }
+    const result = state.competitiveKey[index];
+    const word = state.board[index];
+    const team = state.activeTeam;
+    const opponent = otherTeam(team);
+    state.revealed.add(index);
+    state.hasGuessed = true;
+    state.guessesThisTurn += 1;
+
+    if (result === team) {
+      logEvent(`${word}: ${teamName(team)} agent found.`);
+      if (competitiveFound(team) === (state.startingTeam === team ? 9 : 8)) {
+        succeed();
+      } else if (state.guessesThisTurn >= state.guessLimit) {
+        spendTurn(`${teamName(team)} reached the clue limit. Turn ended.`);
+      }
+    } else if (result === opponent) {
+      logEvent(`${word}: ${teamName(opponent)} agent revealed.`);
+      if (competitiveFound(opponent) === (state.startingTeam === opponent ? 9 : 8)) {
+        state.activeTeam = opponent;
+        succeed();
+      } else {
+        spendTurn(`${teamName(team)} revealed an opponent agent. Turn ended.`);
+      }
+    } else if (result === "assassin") {
+      state.activeTeam = opponent;
+      fail(`${word} was the assassin. ${teamName(opponent)} team wins.`, index);
+    } else {
+      spendTurn(`${word}: innocent bystander. Turn ended.`);
+    }
+    render();
+  }
+
   function confirmBystander() {
     if (!state || !state.pendingBystander) {
       return;
@@ -504,7 +724,7 @@
   function renderKeyGrid(grid, side) {
     grid.innerHTML = "";
     state.board.forEach((word, index) => {
-      const result = state.keys[side][index];
+      const result = state.mode === "compete" ? state.competitiveKey[index] : state.keys[side][index];
       const cell = document.createElement("div");
       cell.className = `key-cell ${result}`;
       const label = document.createElement("span");
@@ -548,7 +768,21 @@
     dom.shell.classList.add("hidden");
     dom.resultBanner.classList.add("hidden");
     dom.phoneKeyView.classList.remove("hidden");
-    dom.phoneKeyTitle.textContent = `Side ${payload.side} key`;
+    const compete = payload.mode === "compete";
+    dom.phoneKeyTitle.textContent = compete ? "Spymaster key" : `Side ${payload.side} key`;
+    const legend = dom.phoneKeyView.querySelector(".legend");
+    legend.innerHTML = compete
+      ? `
+        <span class="red">Red</span>
+        <span class="blue">Blue</span>
+        <span class="bystander">Bystander</span>
+        <span class="assassin">Assassin</span>
+      `
+      : `
+        <span class="agent">Contact</span>
+        <span class="bystander">Bystander</span>
+        <span class="assassin">Assassin</span>
+      `;
     dom.phoneKeyGrid.innerHTML = "";
     payload.words.forEach((word, index) => {
       const role = roleFromCode(payload.roles[index]);
@@ -561,6 +795,77 @@
       dom.phoneKeyGrid.append(cell);
     });
     fitKeyLabels(dom.phoneKeyGrid);
+  }
+
+  function formatTimer(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+  }
+
+  function renderKeyTimer() {
+    dom.timerDisplay.textContent = formatTimer(keyTimerRemaining);
+    dom.timerPause.textContent = keyTimerPaused ? "Continue" : "Pause";
+    dom.timerStatus.textContent = keyTimerRemaining === 0 ? "Time's up" : keyTimerPaused ? "Paused" : "Running";
+    dom.timerMinus.disabled = keyTimerDuration <= 30;
+  }
+
+  function stopKeyTimer() {
+    if (keyTimerId) {
+      clearInterval(keyTimerId);
+      keyTimerId = null;
+    }
+  }
+
+  function startKeyTimer() {
+    stopKeyTimer();
+    keyTimerPaused = false;
+    renderKeyTimer();
+    keyTimerId = window.setInterval(() => {
+      if (keyTimerPaused || keyTimerRemaining === 0) {
+        return;
+      }
+      keyTimerRemaining -= 1;
+      if (keyTimerRemaining === 0) {
+        keyTimerPaused = true;
+        stopKeyTimer();
+      }
+      renderKeyTimer();
+    }, 1000);
+  }
+
+  function resetKeyTimer() {
+    keyTimerRemaining = keyTimerDuration;
+    startKeyTimer();
+  }
+
+  function adjustKeyTimer(change) {
+    const nextDuration = Math.max(30, keyTimerDuration + change);
+    const delta = nextDuration - keyTimerDuration;
+    keyTimerDuration = nextDuration;
+    keyTimerRemaining = Math.max(0, keyTimerRemaining + delta);
+    renderKeyTimer();
+  }
+
+  function toggleKeyTimer() {
+    if (keyTimerRemaining === 0) {
+      resetKeyTimer();
+      return;
+    }
+    if (keyTimerPaused && !keyTimerId) {
+      startKeyTimer();
+      return;
+    }
+    keyTimerPaused = !keyTimerPaused;
+    renderKeyTimer();
+  }
+
+  function prepareKeyTimer() {
+    keyTimerDuration = 60;
+    keyTimerRemaining = keyTimerDuration;
+    keyTimerPaused = true;
+    stopKeyTimer();
+    renderKeyTimer();
   }
 
   function loadPhoneKeyIfPresent() {
@@ -586,18 +891,58 @@
     }
     dom.keyGridA.innerHTML = "";
     dom.keyGridB.innerHTML = "";
+    dom.competitiveKeyTimer.classList.add("hidden");
+    stopKeyTimer();
+    dom.keyRevealStep.classList.toggle("competitive-key", state.mode === "compete");
+    dom.keyAlignStep.classList.toggle("competitive-privacy-step", state.mode === "compete");
     dom.keyAlignStep.classList.remove("hidden");
     dom.keyRevealStep.classList.add("hidden");
+    dom.keyAlignStep.querySelector(".eyebrow").textContent = state.mode === "compete" ? "Privacy check" : "Step 1";
+    dom.keyAlignStep.querySelector("h2").textContent = state.mode === "compete" ? "Ask operatives to turn around" : "Align your paper screen";
+    dom.keyAlignStep.querySelector("p:not(.eyebrow)").textContent = state.mode === "compete"
+      ? "Before revealing the shared key, all guessing players should turn around, cover their eyes, or step away from the screen. Only spymasters should look."
+      : "Place a folded piece of paper vertically along the center line. Keep it in place, then Side A can reveal both private keys.";
+    document.querySelector("#reveal-keys").textContent = state.mode === "compete" ? "Operatives are not looking" : "Step 2: Reveal keys";
     dom.keyDialog.showModal();
   }
 
   function revealSharedKeys() {
-    renderKeyGrid(dom.keyGridA, "A");
-    renderKeyGrid(dom.keyGridB, "B");
+    if (state.mode === "compete") {
+      prepareKeyTimer();
+      renderKeyGrid(dom.keyGridA, "competitive");
+      dom.keyGridB.innerHTML = "";
+      dom.competitiveKeyTimer.classList.remove("hidden");
+      document.querySelector(".key-half.side-a .eyebrow").textContent = "Spymaster view";
+      document.querySelector(".key-half.side-a h2").textContent = "Shared key";
+      document.querySelector(".key-half.side-a .privacy").textContent = "Keep this hidden from operatives.";
+      document.querySelector(".key-half.side-a .legend").innerHTML = `
+        <span class="red">Red</span>
+        <span class="blue">Blue</span>
+        <span class="bystander">Bystander</span>
+        <span class="assassin">Assassin</span>
+      `;
+    } else {
+      renderKeyGrid(dom.keyGridA, "A");
+      renderKeyGrid(dom.keyGridB, "B");
+      dom.competitiveKeyTimer.classList.add("hidden");
+      stopKeyTimer();
+      document.querySelector(".key-half.side-a .eyebrow").textContent = "Player view";
+      document.querySelector(".key-half.side-a h2").textContent = "Side A key";
+      document.querySelector(".key-half.side-a .privacy").textContent = "Keep the paper screen in place.";
+      document.querySelector(".key-half.side-a .legend").innerHTML = `
+        <span class="agent">Agent</span>
+        <span class="bystander">Bystander</span>
+        <span class="assassin">Assassin</span>
+      `;
+    }
     dom.keyAlignStep.classList.add("hidden");
     dom.keyRevealStep.classList.remove("hidden");
+    if (state.mode === "compete") {
+      startKeyTimer();
+    }
   }
 
+  dom.gameModes.forEach((input) => input.addEventListener("change", updateModeSettings));
   dom.vocabInput.addEventListener("input", updateCustomCount);
   dom.vocabFile.addEventListener("change", async (event) => {
     const file = event.target.files[0];
@@ -616,6 +961,12 @@
   window.addEventListener("resize", refitVisibleKeyLabels);
   document.querySelector("#prepare-keys").addEventListener("click", prepareSharedKeys);
   document.querySelector("#reveal-keys").addEventListener("click", revealSharedKeys);
+  dom.qrToggle.addEventListener("click", toggleQrCodes);
+  dom.timerMinus.addEventListener("click", () => adjustKeyTimer(-30));
+  dom.timerPlus.addEventListener("click", () => adjustKeyTimer(30));
+  dom.timerPause.addEventListener("click", toggleKeyTimer);
+  dom.timerReset.addEventListener("click", resetKeyTimer);
+  dom.keyDialog.addEventListener("close", stopKeyTimer);
   document.querySelector("#hide-key").addEventListener("click", () => dom.keyDialog.close());
   document.querySelector("#rules-open").addEventListener("click", () => dom.rulesDialog.showModal());
   document.querySelector("#rules-close").addEventListener("click", () => dom.rulesDialog.close());
@@ -627,6 +978,7 @@
   });
 
   if (!loadPhoneKeyIfPresent()) {
+    updateModeSettings();
     updateCustomCount();
   }
 })();

@@ -39,33 +39,68 @@
             </label>
             <p id="word-count" class="quiet">No custom entries yet. The learning pool will supply all 25 words.</p>
           </div>
-          <fieldset class="mode-switch" aria-label="Device mode">
-            <legend>Device mode</legend>
+          <fieldset class="mode-switch" aria-label="Game mode">
+            <legend>Game mode</legend>
             <label>
-              <input type="radio" name="device-mode" value="one" checked>
-              <span>One device</span>
+              <input type="radio" name="game-mode" value="coop" checked>
+              <span>Coop</span>
             </label>
             <label>
-              <input type="radio" name="device-mode" value="multi">
-              <span>Multi-device</span>
+              <input type="radio" name="game-mode" value="compete">
+              <span>Compete</span>
             </label>
           </fieldset>
-          <div class="options">
-            <label class="field compact">
-              <span>Timer tokens</span>
-              <select id="timer-count">
-                <option value="9" selected>9 - Standard</option>
-                <option value="10">10 - Relaxed</option>
-                <option value="11">11 - Classroom practice</option>
-              </select>
-            </label>
-            <label class="field compact">
-              <span>First clue-giver</span>
-              <select id="first-giver">
-                <option value="A" selected>Side A</option>
-                <option value="B">Side B</option>
-              </select>
-            </label>
+          <div id="coop-settings" class="mode-settings">
+            <fieldset class="mode-switch" aria-label="Device mode">
+              <legend>Device mode</legend>
+              <label>
+                <input type="radio" name="device-mode" value="one" checked>
+                <span>One device</span>
+              </label>
+              <label>
+                <input type="radio" name="device-mode" value="multi">
+                <span>Multi-device</span>
+              </label>
+            </fieldset>
+            <div class="options">
+              <label class="field compact">
+                <span>Timer tokens</span>
+                <select id="timer-count">
+                  <option value="9" selected>9 - Standard</option>
+                  <option value="10">10 - Relaxed</option>
+                  <option value="11">11 - Classroom practice</option>
+                </select>
+              </label>
+              <label class="field compact">
+                <span>First clue-giver</span>
+                <select id="first-giver">
+                  <option value="A" selected>Side A</option>
+                  <option value="B">Side B</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div id="compete-settings" class="mode-settings hidden">
+            <fieldset class="mode-switch" aria-label="Competitive device mode">
+              <legend>Competitive device mode</legend>
+              <label>
+                <input type="radio" name="compete-device-mode" value="one" checked>
+                <span>One device</span>
+              </label>
+              <label>
+                <input type="radio" name="compete-device-mode" value="multi">
+                <span>Multi-device</span>
+              </label>
+            </fieldset>
+            <div class="options">
+              <label class="field compact">
+                <span>Starting team</span>
+                <select id="starting-team">
+                  <option value="red" selected>Red - 9 agents</option>
+                  <option value="blue">Blue - 9 agents</option>
+                </select>
+              </label>
+            </div>
           </div>
           <button class="primary" type="submit">Create 5 x 5 Mission</button>
         </form>
@@ -99,23 +134,28 @@
             </div>
 
             <div id="multi-device-keys" class="multi-device-keys hidden">
-              <div>
-                <p class="eyebrow">Phone keys</p>
-                <p class="key-note">Scan each QR code with the matching player's phone.</p>
+              <div class="qr-panel-head">
+                <div>
+                  <p class="eyebrow">Phone keys</p>
+                  <p class="key-note">Scan each QR code with the matching player's phone.</p>
+                </div>
+                <button id="qr-toggle" class="text-button" type="button" aria-expanded="true" aria-controls="qr-collapse-content">Hide QR codes</button>
               </div>
-              <div class="qr-pair">
-                <article class="qr-card">
-                  <h3>Side A</h3>
-                  <div id="qr-a" class="qr-code" role="img" aria-label="QR code for Side A key"></div>
-                  <a id="qr-link-a" target="_blank" rel="noreferrer">Open Side A key</a>
-                </article>
-                <article class="qr-card">
-                  <h3>Side B</h3>
-                  <div id="qr-b" class="qr-code" role="img" aria-label="QR code for Side B key"></div>
-                  <a id="qr-link-b" target="_blank" rel="noreferrer">Open Side B key</a>
-                </article>
+              <div id="qr-collapse-content" class="qr-collapse-content">
+                <div class="qr-pair">
+                  <article class="qr-card">
+                    <h3>Side A</h3>
+                    <div id="qr-a" class="qr-code" role="img" aria-label="QR code for Side A key"></div>
+                    <a id="qr-link-a" target="_blank" rel="noreferrer">Open Side A key</a>
+                  </article>
+                  <article class="qr-card">
+                    <h3>Side B</h3>
+                    <div id="qr-b" class="qr-code" role="img" aria-label="QR code for Side B key"></div>
+                    <a id="qr-link-b" target="_blank" rel="noreferrer">Open Side B key</a>
+                  </article>
+                </div>
+                <p class="qr-note">Phones must be able to reach this page's web address. Localhost works only on this device.</p>
               </div>
-              <p class="qr-note">Phones must be able to reach this page's web address. Localhost works only on this device.</p>
             </div>
 
             <form id="clue-form" class="clue-form">
@@ -185,6 +225,16 @@
             <p class="eyebrow">Player view</p>
             <h2>Side A key</h2>
             <p class="privacy">Keep the paper screen in place.</p>
+            <div id="competitive-key-timer" class="key-timer hidden" aria-label="Competitive key timer">
+              <button id="timer-minus" class="text-button" type="button">-30s</button>
+              <div class="timer-readout">
+                <strong id="timer-display">01:00</strong>
+                <span id="timer-status">Running</span>
+              </div>
+              <button id="timer-plus" class="text-button" type="button">+30s</button>
+              <button id="timer-pause" class="secondary" type="button">Pause</button>
+              <button id="timer-reset" class="text-button" type="button">Reset</button>
+            </div>
             <div id="key-grid-a" class="key-grid"></div>
             <div class="legend">
               <span class="agent">Agent</span>
@@ -229,17 +279,22 @@
         <button id="rules-close" class="text-button" type="button">Close</button>
       </div>
       <ul>
-        <li>There are 25 words and 15 agents that both players must contact together.</li>
-        <li>Place a paper screen on the center line, then reveal both opposite-facing key sides for players seated across from each other.</li>
-        <li>In multi-device mode, scan Side A and Side B QR codes to show private keys on separate phones.</li>
-        <li>Each clue-giver privately sees nine green agents and three black assassins on their key side.</li>
-        <li>Give a one-word clue and a number. Your partner guesses words linked to that clue.</li>
-        <li>A green guess is contacted and guessing may continue. A bystander ends the turn. An assassin loses immediately.</li>
-        <li>You spend one timer token at the end of each normal turn. After the last token, sudden death begins.</li>
-        <li>In sudden death no clues are given: contact all remaining agents, but any non-agent guess loses.</li>
+        <li>Coop mode follows Codenames: Duet: 25 words, two private key sides, 15 shared agents, timer tokens, and sudden death.</li>
+        <li>For coop one-device play, place a paper screen on the center line before revealing the opposite-facing key sides.</li>
+        <li>For coop multi-device play, scan Side A and Side B QR codes to show private keys on separate phones.</li>
+        <li>Compete mode follows standard Codenames: two teams use one shared spymaster key, with the starting team having 9 agents and the other team having 8.</li>
+        <li>For compete one-device play, guessing players should turn around, cover their eyes, or step away before the spymasters reveal the shared key.</li>
+        <li>The competitive one-device key display includes a countdown timer that can be adjusted in 30-second steps, paused, continued, and reset.</li>
+        <li>For compete multi-device play, scan the spymaster QR code to show the shared key on a separate phone.</li>
+        <li>In either mode, a clue is one word plus a number. Guessers must make at least one guess, then may stop if the turn is still active.</li>
+        <li>In compete mode, your team's agent lets you keep guessing, a bystander ends the turn, an opponent agent scores for the opponent and ends the turn, and the assassin makes your team lose immediately.</li>
+        <li>In coop mode, a green guess is contacted and guessing may continue. A bystander ends the turn. An assassin loses immediately.</li>
+        <li>In coop sudden death, no clues are given: contact all remaining agents, but any non-agent guess loses.</li>
       </ul>
       <p class="rules-source">
-        Based on the standard cooperative rules in the
+        Based on the
+        <a href="https://czechgames.com/files/rules/codenames-rules-en.pdf" target="_blank" rel="noreferrer">official Codenames rulebook</a>
+        and
         <a href="https://filemanager.czechgames.com/storage/files/codenames-duet/rules/codenames-duet-rules-en.pdf" target="_blank" rel="noreferrer">official Codenames: Duet rulebook</a>.
       </p>
     </dialog>
