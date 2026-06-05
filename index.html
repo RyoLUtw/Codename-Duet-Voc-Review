@@ -49,6 +49,10 @@
               <input type="radio" name="game-mode" value="compete">
               <span>Compete</span>
             </label>
+            <label>
+              <input type="radio" name="game-mode" value="solo">
+              <span>Solo</span>
+            </label>
           </fieldset>
           <div id="coop-settings" class="mode-settings">
             <fieldset class="mode-switch" aria-label="Device mode">
@@ -79,6 +83,13 @@
                 </select>
               </label>
             </div>
+            <label class="checkbox-option">
+              <input id="tv-mode" type="checkbox">
+              <span>
+                <strong>TV mode</strong>
+                Show both tabletop keys in the same direction for a fixed-orientation TV or projector.
+              </span>
+            </label>
           </div>
           <div id="compete-settings" class="mode-settings hidden">
             <fieldset class="mode-switch" aria-label="Competitive device mode">
@@ -167,6 +178,7 @@
                 <span>Number</span>
                 <input id="clue-number" type="number" min="0" max="9" placeholder="1">
               </label>
+              <button class="secondary" id="pass-turn" type="button">Pass turn</button>
               <button class="primary" id="begin-guesses" type="submit">Begin guesses</button>
             </form>
 
@@ -192,6 +204,7 @@
           <div class="board-head">
             <p id="board-source"></p>
             <div class="board-buttons">
+              <button class="text-button" id="retry-mission" type="button">Retry mission</button>
               <button class="text-button" id="restart" type="button">New mission</button>
               <button class="text-button" id="back-setup" type="button">Edit vocabulary</button>
             </div>
@@ -259,6 +272,54 @@
       </section>
     </dialog>
 
+    <dialog id="solo-setup-dialog" class="solo-setup-dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">Solo AI clues</p>
+          <h2>Prepare your clue list</h2>
+        </div>
+      </div>
+      <div class="solo-tools">
+        <button id="copy-solo-prompt" class="primary" type="button">Copy AI prompt data</button>
+        <p id="solo-copy-status" class="quiet">Paste the copied data into your AI chatbot, then paste CSV rows as clue, number, associated contact words.</p>
+      </div>
+      <label class="field">
+        <span>AI clues CSV</span>
+        <textarea id="solo-clue-input" rows="7" placeholder="shadow, 2, night, secret&#10;paper, 1, document"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button id="import-solo-clues" class="primary" type="button">Import clues</button>
+      </div>
+    </dialog>
+
+    <dialog id="solo-clues-dialog" class="solo-clues-dialog">
+      <div class="dialog-head">
+        <h2>Select clue</h2>
+        <button id="solo-clues-close" class="text-button" type="button">Close</button>
+      </div>
+      <ol id="solo-clues-list" class="solo-clues-list"></ol>
+    </dialog>
+
+    <dialog id="solo-luck-dialog" class="solo-luck-dialog">
+      <div class="dialog-head">
+        <h2>Different contact</h2>
+      </div>
+      <p>You lucked out this is a contact. But it's not what the clue is pointing to. You may keep guessing.</p>
+      <div class="dialog-actions">
+        <button id="solo-luck-continue" class="primary" type="button">Continue</button>
+      </div>
+    </dialog>
+
+    <dialog id="solo-clue-complete-dialog" class="solo-clue-complete-dialog">
+      <div class="dialog-head">
+        <h2>Clue completed</h2>
+      </div>
+      <p>All associated agents for the current clue have been contacted.</p>
+      <div class="dialog-actions">
+        <button id="solo-complete-select-clue" class="primary" type="button">Select another clue</button>
+      </div>
+    </dialog>
+
     <main id="phone-key-view" class="phone-key-view hidden">
       <section class="phone-key-card">
         <p class="eyebrow">Private phone key</p>
@@ -286,6 +347,7 @@
         <li>For compete one-device play, guessing players should turn around, cover their eyes, or step away before the spymasters reveal the shared key.</li>
         <li>The competitive one-device key display includes a countdown timer that can be adjusted in 30-second steps, paused, continued, and reset.</li>
         <li>For compete multi-device play, scan the spymaster QR code to show the shared key on a separate phone.</li>
+        <li>Solo mode creates one hidden key with 15 agents, 7 bystanders, and 3 assassins. Copy the role string to an AI chatbot, import CSV clues with associated contact words, then guess from the board.</li>
         <li>In either mode, a clue is one word plus a number. Guessers must make at least one guess, then may stop if the turn is still active.</li>
         <li>In compete mode, your team's agent lets you keep guessing, a bystander ends the turn, an opponent agent scores for the opponent and ends the turn, and the assassin makes your team lose immediately.</li>
         <li>In coop mode, a green guess is contacted and guessing may continue. A bystander ends the turn. An assassin loses immediately.</li>
@@ -297,6 +359,14 @@
         and
         <a href="https://filemanager.czechgames.com/storage/files/codenames-duet/rules/codenames-duet-rules-en.pdf" target="_blank" rel="noreferrer">official Codenames: Duet rulebook</a>.
       </p>
+    </dialog>
+
+    <dialog id="skip-turn-dialog" class="skip-turn-dialog">
+      <div class="dialog-head">
+        <h2 id="skip-turn-title">Turn skipped</h2>
+        <button id="skip-turn-close" class="text-button" type="button">Continue</button>
+      </div>
+      <p id="skip-turn-message"></p>
     </dialog>
 
     <div id="result-banner" class="result-banner hidden" role="status">

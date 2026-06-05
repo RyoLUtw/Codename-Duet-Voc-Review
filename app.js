@@ -31,6 +31,7 @@
     competeDeviceModes: document.querySelectorAll("input[name='compete-device-mode']"),
     timerCount: document.querySelector("#timer-count"),
     firstGiver: document.querySelector("#first-giver"),
+    tvMode: document.querySelector("#tv-mode"),
     startingTeam: document.querySelector("#starting-team"),
     board: document.querySelector("#board"),
     boardSource: document.querySelector("#board-source"),
@@ -45,6 +46,7 @@
     clueNumber: document.querySelector("#clue-number"),
     guessActions: document.querySelector("#guess-actions"),
     activeClue: document.querySelector("#active-clue"),
+    passTurn: document.querySelector("#pass-turn"),
     endTurn: document.querySelector("#end-turn"),
     suddenControls: document.querySelector("#sudden-controls"),
     suddenGuesser: document.querySelector("#sudden-guesser"),
@@ -64,6 +66,15 @@
     keyRevealStep: document.querySelector("#key-reveal-step"),
     keyGridA: document.querySelector("#key-grid-a"),
     keyGridB: document.querySelector("#key-grid-b"),
+    soloSetupDialog: document.querySelector("#solo-setup-dialog"),
+    copySoloPrompt: document.querySelector("#copy-solo-prompt"),
+    soloCopyStatus: document.querySelector("#solo-copy-status"),
+    soloClueInput: document.querySelector("#solo-clue-input"),
+    importSoloClues: document.querySelector("#import-solo-clues"),
+    soloCluesDialog: document.querySelector("#solo-clues-dialog"),
+    soloCluesList: document.querySelector("#solo-clues-list"),
+    soloLuckDialog: document.querySelector("#solo-luck-dialog"),
+    soloClueCompleteDialog: document.querySelector("#solo-clue-complete-dialog"),
     competitiveKeyTimer: document.querySelector("#competitive-key-timer"),
     timerDisplay: document.querySelector("#timer-display"),
     timerStatus: document.querySelector("#timer-status"),
@@ -72,6 +83,9 @@
     timerPause: document.querySelector("#timer-pause"),
     timerReset: document.querySelector("#timer-reset"),
     rulesDialog: document.querySelector("#rules-dialog"),
+    skipTurnDialog: document.querySelector("#skip-turn-dialog"),
+    skipTurnTitle: document.querySelector("#skip-turn-title"),
+    skipTurnMessage: document.querySelector("#skip-turn-message"),
     masthead: document.querySelector(".masthead"),
     shell: document.querySelector(".shell"),
     phoneKeyView: document.querySelector("#phone-key-view"),
@@ -109,6 +123,10 @@
       found.add(key);
       return true;
     });
+  }
+
+  function normalizedWord(word) {
+    return word.trim().toLocaleLowerCase();
   }
 
   function updateCustomCount() {
@@ -159,6 +177,14 @@
     return shuffle(roles);
   }
 
+  function createSoloKey() {
+    return shuffle([
+      ...Array(15).fill("agent"),
+      ...Array(7).fill("bystander"),
+      ...Array(3).fill("assassin")
+    ]);
+  }
+
   function otherSide(side) {
     return side === "A" ? "B" : "A";
   }
@@ -179,8 +205,10 @@
   }
 
   function updateModeSettings() {
-    const compete = selectedGameMode() === "compete";
-    dom.coopSettings.classList.toggle("hidden", compete);
+    const mode = selectedGameMode();
+    const compete = mode === "compete";
+    const coop = mode === "coop";
+    dom.coopSettings.classList.toggle("hidden", !coop);
     dom.competeSettings.classList.toggle("hidden", !compete);
   }
 
@@ -199,6 +227,7 @@
       customCount: selectedCustom.length,
       poolCount: fillers.length,
       keys: mode === "coop" ? createKey() : null,
+      soloKey: mode === "solo" ? createSoloKey() : null,
       competitiveKey: mode === "compete" ? createCompetitiveKey(dom.startingTeam.value) : null,
       startingTeam: mode === "compete" ? dom.startingTeam.value : null,
       activeTeam: mode === "compete" ? dom.startingTeam.value : null,
@@ -211,16 +240,44 @@
       revealedAssassin: null,
       clueGiver: dom.firstGiver.value,
       tokens: timerLimit,
+      alarms: 0,
+      alarmLimit: 3,
       timerLimit,
-      phase: "clue",
+      phase: mode === "solo" ? "solo-setup" : "clue",
       clue: null,
+      soloClues: [],
+      activeSoloClue: null,
+      soloPromptString: "",
       hasGuessed: false,
       guessesThisTurn: 0,
       guessLimit: null,
       pendingBystander: null,
-      deviceMode: mode === "coop" ? selectedDeviceMode() : selectedCompeteDeviceMode(),
+      deviceMode: mode === "coop" ? selectedDeviceMode() : mode === "compete" ? selectedCompeteDeviceMode() : "one",
+      tvMode: mode === "coop" && dom.tvMode.checked,
       log: []
     };
+    if (mode === "solo") {
+      state.soloPromptString = soloPromptString();
+    }
+  }
+
+  function soloPromptString() {
+    const grouped = {
+      agent: [],
+      bystanders: [],
+      assassins: []
+    };
+    state.board.forEach((word, index) => {
+      const role = state.soloKey[index];
+      if (role === "agent") {
+        grouped.agent.push(word);
+      } else if (role === "assassin") {
+        grouped.assassins.push(word);
+      } else {
+        grouped.bystanders.push(word);
+      }
+    });
+    return `agent: ${grouped.agent.join(", ")} . bystanders: ${grouped.bystanders.join(", ")} . assassins: ${grouped.assassins.join(", ")}`;
   }
 
   function bytesToBase64Url(bytes) {
@@ -391,8 +448,13 @@
       const competitiveRole = state.mode === "compete" && state.revealed.has(index)
         ? state.competitiveKey[index]
         : null;
+      const soloRole = state.mode === "solo" && state.revealed.has(index)
+        ? state.soloKey[index]
+        : null;
       if (state.mode === "compete" && competitiveRole) {
         classes.push(`revealed-${competitiveRole}`);
+      } else if (state.mode === "solo" && soloRole) {
+        classes.push(soloRole === "agent" ? "contacted" : `revealed-${soloRole}`);
       } else if (state.contacted.has(index)) {
         classes.push("contacted");
       } else if (state.revealedAssassin === index) {
@@ -404,7 +466,7 @@
       card.type = "button";
       card.dataset.index = String(index);
       card.setAttribute("aria-label", word);
-      card.disabled = Boolean(state.pendingBystander) || state.contacted.has(index) || state.revealed.has(index) || ["clue", "won", "lost"].includes(state.phase);
+      card.disabled = Boolean(state.pendingBystander) || state.contacted.has(index) || state.revealed.has(index) || !["guess", "sudden", "solo"].includes(state.phase);
       card.textContent = word;
 
       if (competitiveRole === "red" || competitiveRole === "blue") {
@@ -416,6 +478,18 @@
         mark.textContent = "bystander";
         card.append(mark);
       } else if (competitiveRole === "assassin") {
+        const mark = document.createElement("small");
+        mark.textContent = "assassin";
+        card.append(mark);
+      } else if (soloRole === "agent") {
+        const mark = document.createElement("small");
+        mark.textContent = "contacted";
+        card.append(mark);
+      } else if (soloRole === "bystander") {
+        const mark = document.createElement("small");
+        mark.textContent = "alarm";
+        card.append(mark);
+      } else if (soloRole === "assassin") {
         const mark = document.createElement("small");
         mark.textContent = "assassin";
         card.append(mark);
@@ -458,12 +532,46 @@
     return team === "red" ? "blue" : "red";
   }
 
+  function sideKeyComplete(side) {
+    return state.keys[side].every((role, index) => role !== "agent" || state.contacted.has(index));
+  }
+
+  function showSkippedTurnModal(skippedSide, activeSide) {
+    dom.skipTurnTitle.textContent = `Side ${skippedSide} turn skipped`;
+    dom.skipTurnMessage.textContent = `All agents on Side ${skippedSide}'s key are already contacted, so Side ${activeSide} continues giving clues. No turn token was spent for the skipped turn.`;
+    dom.skipTurnDialog.showModal();
+  }
+
+  function skipCompletedCoopSideIfNeeded() {
+    if (!state || state.mode !== "coop" || state.phase !== "clue") {
+      return;
+    }
+    const skippedSide = state.clueGiver;
+    const activeSide = otherSide(skippedSide);
+    if (!sideKeyComplete(skippedSide) || sideKeyComplete(activeSide)) {
+      return;
+    }
+    state.clueGiver = activeSide;
+    state.clue = null;
+    state.hasGuessed = false;
+    dom.clueWord.value = "";
+    dom.clueNumber.value = "";
+    logEvent(`Side ${skippedSide}'s key is complete. Side ${activeSide} continues without spending a turn.`);
+    showSkippedTurnModal(skippedSide, activeSide);
+  }
+
   function render() {
     const guesser = otherSide(state.clueGiver);
     const normalGuess = state.phase === "guess";
     const over = state.phase === "won" || state.phase === "lost";
     const compete = state.mode === "compete";
-    if (compete) {
+    const solo = state.mode === "solo";
+    if (solo) {
+      dom.agentsFound.textContent = `${state.contacted.size}/15`;
+      dom.agentsFound.nextElementSibling.textContent = "agents contacted";
+      dom.tokensLeft.textContent = String(Math.max(state.alarmLimit - state.alarms, 0));
+      dom.tokensLeft.nextElementSibling.textContent = "alarms left";
+    } else if (compete) {
       dom.agentsFound.textContent = `${competitiveFound("red")}/${state.startingTeam === "red" ? 9 : 8}`;
       dom.agentsFound.nextElementSibling.textContent = "red agents";
       dom.tokensLeft.textContent = `${competitiveFound("blue")}/${state.startingTeam === "blue" ? 9 : 8}`;
@@ -476,17 +584,32 @@
     }
     dom.customUsed.textContent = String(state.customCount);
     dom.boardSource.textContent = `${state.customCount} custom word${state.customCount === 1 ? "" : "s"} and ${state.poolCount} learning-pool word${state.poolCount === 1 ? "" : "s"} on this board.`;
-    dom.clueForm.classList.toggle("hidden", state.phase !== "clue");
+    dom.clueForm.classList.toggle("hidden", solo || state.phase !== "clue");
     dom.guessActions.classList.toggle("hidden", !normalGuess);
     dom.suddenControls.classList.toggle("hidden", compete || state.phase !== "sudden");
     const keyActions = document.querySelector(".key-actions");
-    keyActions.classList.toggle("hidden", state.deviceMode === "multi");
-    keyActions.querySelector(".eyebrow").textContent = compete ? "Spymaster key" : "Private keys";
-    keyActions.querySelector(".key-note").textContent = compete ? "Reveal only to spymasters." : "Use a paper screen between players.";
-    keyActions.querySelector("button").textContent = compete ? "Show shared key" : "Set up shared keys";
+    keyActions.classList.toggle("hidden", !solo && state.deviceMode === "multi");
+    keyActions.querySelector(".eyebrow").textContent = solo ? "AI clue tackle" : compete ? "Spymaster key" : "Private keys";
+    keyActions.querySelector(".key-note").textContent = solo
+      ? state.activeSoloClue === null
+        ? `${state.soloClues.length} clue${state.soloClues.length === 1 ? "" : "s"} imported.`
+        : `Current clue: ${state.soloClues[state.activeSoloClue].word}, ${state.soloClues[state.activeSoloClue].number}`
+      : compete ? "Reveal only to spymasters." : "Use a paper screen between players.";
+    keyActions.querySelector("button").textContent = solo ? "Select clue" : compete ? "Show shared key" : "Set up shared keys";
+    keyActions.querySelector("button").disabled = solo && state.soloClues.length === 0;
     renderMultiDeviceKeys();
 
-    if (state.phase === "clue") {
+    if (solo && state.phase === "solo-setup") {
+      dom.turnHeading.textContent = "Import AI clues";
+      dom.turnGuidance.textContent = "Copy the hidden role string into an AI chatbot, then import its CSV clue list.";
+      dom.phasePill.textContent = "Setup";
+    } else if (solo && state.phase === "solo") {
+      dom.turnHeading.textContent = "Use AI clues to guess";
+      dom.turnGuidance.textContent = state.activeSoloClue === null
+        ? "Select a clue to tackle, then choose words on the board. Three bystander alarms lose the game."
+        : `Tackling clue: ${state.soloClues[state.activeSoloClue].word}, ${state.soloClues[state.activeSoloClue].number}`;
+      dom.phasePill.textContent = "Solo";
+    } else if (state.phase === "clue") {
       dom.turnHeading.textContent = compete ? `${teamName(state.activeTeam)} spymaster gives a clue` : `Side ${state.clueGiver} gives a clue`;
       dom.turnGuidance.textContent = compete
         ? "Open the shared spymaster key when both spymasters need the board map."
@@ -516,6 +639,10 @@
     dom.endTurn.disabled = !state.hasGuessed || !normalGuess || Boolean(state.pendingBystander);
     if (over) {
       dom.keyDialog.close();
+      dom.soloSetupDialog.close();
+      dom.soloCluesDialog.close();
+      dom.soloLuckDialog.close();
+      dom.soloClueCompleteDialog.close();
     }
     renderBoard();
     renderLog();
@@ -531,6 +658,55 @@
     dom.clueNumber.value = "";
     state.pendingBystander = null;
     render();
+    if (state.mode === "solo") {
+      dom.soloClueInput.value = "";
+      dom.soloCopyStatus.textContent = "Paste the copied data into your AI chatbot, then paste CSV rows as clue, number, associated contact words.";
+      dom.soloSetupDialog.showModal();
+    }
+  }
+
+  function retryMission() {
+    if (!state) {
+      return;
+    }
+    hideBanner();
+    dom.keyDialog.close();
+    dom.soloSetupDialog.close();
+    dom.soloCluesDialog.close();
+    dom.soloLuckDialog.close();
+    dom.soloClueCompleteDialog.close();
+    stopKeyTimer();
+    state.contacted = new Set();
+    state.revealed = new Set();
+    state.bystanders = {
+      A: new Set(),
+      B: new Set()
+    };
+    state.revealedAssassin = null;
+    state.clueGiver = dom.firstGiver.value;
+    state.tokens = state.timerLimit;
+    state.alarms = 0;
+    state.clue = null;
+    state.activeSoloClue = null;
+    state.hasGuessed = false;
+    state.guessesThisTurn = 0;
+    state.guessLimit = null;
+    state.pendingBystander = null;
+    state.log = [];
+    if (state.mode === "compete") {
+      state.activeTeam = state.startingTeam;
+      state.phase = "clue";
+    } else if (state.mode === "solo") {
+      state.phase = state.soloClues.length ? "solo" : "solo-setup";
+    } else {
+      state.phase = "clue";
+    }
+    dom.clueWord.value = "";
+    dom.clueNumber.value = "";
+    render();
+    if (state.mode === "solo" && !state.soloClues.length) {
+      dom.soloSetupDialog.showModal();
+    }
   }
 
   function beginGuessing(event) {
@@ -589,6 +765,7 @@
     state.hasGuessed = false;
     dom.clueWord.value = "";
     dom.clueNumber.value = "";
+    skipCompletedCoopSideIfNeeded();
   }
 
   function succeed() {
@@ -625,7 +802,11 @@
   }
 
   function makeGuess(index) {
-    if (!state || state.pendingBystander || !["guess", "sudden"].includes(state.phase)) {
+    if (!state || state.pendingBystander || !["guess", "sudden", "solo"].includes(state.phase)) {
+      return;
+    }
+    if (state.mode === "solo") {
+      makeSoloGuess(index);
       return;
     }
     if (state.mode === "compete") {
@@ -662,6 +843,43 @@
         logText: `${word}: bystander. Turn ended.`
       };
       showBanner(`${word} is a bystander. Guessing ends. Side ${nextClueGiver} gives clue now.`, "bystander", true);
+    }
+    render();
+  }
+
+  function makeSoloGuess(index) {
+    if (state.revealed.has(index)) {
+      return;
+    }
+    const result = state.soloKey[index];
+    const word = state.board[index];
+    state.revealed.add(index);
+    if (result === "agent") {
+      state.contacted.add(index);
+      logEvent(`${word}: agent contacted.`);
+      if (state.activeSoloClue !== null) {
+        const activeClue = state.soloClues[state.activeSoloClue];
+        const matchesActiveClue = activeClue.contacts.some((contact) => normalizedWord(contact) === normalizedWord(word));
+        const activeClueComplete = soloClueContactCount(activeClue) === activeClue.contacts.length;
+        if (!matchesActiveClue) {
+          dom.soloLuckDialog.showModal();
+        } else if (activeClueComplete && state.contacted.size < 15) {
+          dom.soloClueCompleteDialog.showModal();
+        }
+      }
+      if (state.contacted.size === 15) {
+        succeed();
+      }
+    } else if (result === "assassin") {
+      fail(`${word} was an assassin. Mission failed.`, index);
+    } else {
+      state.alarms += 1;
+      logEvent(`${word}: bystander alarm ${state.alarms}/${state.alarmLimit}.`);
+      if (state.alarms >= state.alarmLimit) {
+        fail(`${word} was a bystander. The enemy was alarmed three times. Mission failed.`);
+      } else {
+        showBanner(`${word} was a bystander. Enemy alarm ${state.alarms}/${state.alarmLimit}.`, "bystander");
+      }
     }
     render();
   }
@@ -721,16 +939,32 @@
     render();
   }
 
+  function passTurn() {
+    if (!state || state.phase !== "clue") {
+      return;
+    }
+    const message = state.mode === "compete"
+      ? `${teamName(state.activeTeam)} passed their turn.`
+      : `Side ${state.clueGiver} passed their turn.`;
+    spendTurn(message);
+    render();
+  }
+
   function renderKeyGrid(grid, side) {
     grid.innerHTML = "";
     state.board.forEach((word, index) => {
       const result = state.mode === "compete" ? state.competitiveKey[index] : state.keys[side][index];
+      const hideContactedWord = state.mode === "compete"
+        ? state.revealed.has(index) && (result === "red" || result === "blue")
+        : result === "agent" && state.contacted.has(index);
       const cell = document.createElement("div");
       cell.className = `key-cell ${result}`;
-      const label = document.createElement("span");
-      label.className = "key-label";
-      label.textContent = word;
-      cell.append(label);
+      if (!hideContactedWord) {
+        const label = document.createElement("span");
+        label.className = "key-label";
+        label.textContent = word;
+        cell.append(label);
+      }
       grid.append(cell);
     });
     fitKeyLabels(grid);
@@ -795,6 +1029,115 @@
       dom.phoneKeyGrid.append(cell);
     });
     fitKeyLabels(dom.phoneKeyGrid);
+  }
+
+  async function copySoloPrompt() {
+    if (!state || state.mode !== "solo") {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(state.soloPromptString);
+      dom.soloCopyStatus.textContent = "Copied. Ask your AI chatbot for CSV clues with rows like clue, number, associated contact 1, associated contact 2.";
+    } catch (error) {
+      const copySource = document.createElement("textarea");
+      copySource.value = state.soloPromptString;
+      copySource.setAttribute("readonly", "");
+      copySource.style.position = "fixed";
+      copySource.style.left = "-9999px";
+      document.body.append(copySource);
+      copySource.select();
+      const copied = document.execCommand("copy");
+      copySource.remove();
+      dom.soloCopyStatus.textContent = copied
+        ? "Copied. Ask your AI chatbot for CSV clues with rows like clue, number, associated contact 1, associated contact 2."
+        : "Copy failed. Try again from a browser context that allows clipboard access.";
+    }
+  }
+
+  function soloContactIndex(word) {
+    const lookup = normalizedWord(word);
+    return state.board.findIndex((entry, index) => normalizedWord(entry) === lookup && state.soloKey[index] === "agent");
+  }
+
+  function soloClueContactCount(clue) {
+    return clue.contacts.filter((word) => {
+      const index = soloContactIndex(word);
+      return index !== -1 && state.contacted.has(index);
+    }).length;
+  }
+
+  function parseSoloClues(text) {
+    return text
+      .split(/[\n;]+/)
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => {
+        const [word, number, ...contacts] = row.split(",");
+        return {
+          word: word.trim().replace(/^["']|["']$/g, ""),
+          number: (number || "").trim().replace(/^["']|["']$/g, ""),
+          contacts: contacts
+            .map((contact) => contact.trim().replace(/^["']|["']$/g, ""))
+            .filter(Boolean)
+        };
+      })
+      .filter((clue) => clue.word && clue.number && clue.contacts.length);
+  }
+
+  function importSoloClues() {
+    if (!state || state.mode !== "solo") {
+      return;
+    }
+    const clues = parseSoloClues(dom.soloClueInput.value);
+    if (!clues.length) {
+      dom.soloCopyStatus.textContent = "Paste clues as CSV rows like shadow, 2, night, secret.";
+      return;
+    }
+    const invalidContacts = clues.flatMap((clue) => clue.contacts.filter((word) => soloContactIndex(word) === -1));
+    if (invalidContacts.length) {
+      dom.soloCopyStatus.textContent = `These associated contacts are not solo agents on this board: ${[...new Set(invalidContacts)].join(", ")}.`;
+      return;
+    }
+    state.soloClues = clues.map((clue) => ({
+      ...clue,
+      contacts: clue.contacts.map((word) => state.board[soloContactIndex(word)])
+    }));
+    state.activeSoloClue = null;
+    state.phase = "solo";
+    logEvent(`${clues.length} AI clue${clues.length === 1 ? "" : "s"} imported.`);
+    dom.soloSetupDialog.close();
+    render();
+  }
+
+  function showSoloClues() {
+    if (!state || state.mode !== "solo") {
+      return;
+    }
+    dom.soloCluesList.innerHTML = "";
+    state.soloClues.forEach((clue, clueIndex) => {
+      const item = document.createElement("li");
+      const contacted = soloClueContactCount(clue);
+      const complete = contacted === clue.contacts.length;
+      const button = document.createElement("button");
+      button.className = "solo-clue-option";
+      button.type = "button";
+      button.disabled = complete;
+      button.textContent = `${clue.word}, ${clue.number} (${contacted}/${clue.contacts.length} associated contacted)`;
+      if (complete) {
+        const status = document.createElement("span");
+        status.textContent = "All associated agents contacted";
+        button.append(status);
+      }
+      button.addEventListener("click", () => {
+        state.activeSoloClue = clueIndex;
+        dom.soloCluesDialog.close();
+        render();
+      });
+      item.classList.toggle("complete", complete);
+      item.append(button);
+      dom.soloCluesList.append(item);
+    });
+    dom.soloCluesDialog.showModal();
   }
 
   function formatTimer(seconds) {
@@ -889,11 +1232,16 @@
     if (!state) {
       return;
     }
+    if (state.mode === "solo") {
+      showSoloClues();
+      return;
+    }
     dom.keyGridA.innerHTML = "";
     dom.keyGridB.innerHTML = "";
     dom.competitiveKeyTimer.classList.add("hidden");
     stopKeyTimer();
     dom.keyRevealStep.classList.toggle("competitive-key", state.mode === "compete");
+    dom.keyRevealStep.classList.toggle("tv-mode", state.tvMode);
     dom.keyAlignStep.classList.toggle("competitive-privacy-step", state.mode === "compete");
     dom.keyAlignStep.classList.remove("hidden");
     dom.keyRevealStep.classList.add("hidden");
@@ -955,6 +1303,7 @@
   });
   dom.setupForm.addEventListener("submit", beginMission);
   dom.clueForm.addEventListener("submit", beginGuessing);
+  dom.passTurn.addEventListener("click", passTurn);
   dom.endTurn.addEventListener("click", endTurn);
   dom.confirmBystander.addEventListener("click", confirmBystander);
   dom.suddenGuesser.addEventListener("change", renderBoard);
@@ -966,10 +1315,20 @@
   dom.timerPlus.addEventListener("click", () => adjustKeyTimer(30));
   dom.timerPause.addEventListener("click", toggleKeyTimer);
   dom.timerReset.addEventListener("click", resetKeyTimer);
+  dom.copySoloPrompt.addEventListener("click", copySoloPrompt);
+  dom.importSoloClues.addEventListener("click", importSoloClues);
   dom.keyDialog.addEventListener("close", stopKeyTimer);
   document.querySelector("#hide-key").addEventListener("click", () => dom.keyDialog.close());
+  document.querySelector("#solo-clues-close").addEventListener("click", () => dom.soloCluesDialog.close());
+  document.querySelector("#solo-luck-continue").addEventListener("click", () => dom.soloLuckDialog.close());
+  document.querySelector("#solo-complete-select-clue").addEventListener("click", () => {
+    dom.soloClueCompleteDialog.close();
+    showSoloClues();
+  });
   document.querySelector("#rules-open").addEventListener("click", () => dom.rulesDialog.showModal());
   document.querySelector("#rules-close").addEventListener("click", () => dom.rulesDialog.close());
+  document.querySelector("#skip-turn-close").addEventListener("click", () => dom.skipTurnDialog.close());
+  document.querySelector("#retry-mission").addEventListener("click", retryMission);
   document.querySelector("#restart").addEventListener("click", () => beginMission(new Event("submit")));
   document.querySelector("#back-setup").addEventListener("click", () => {
     dom.gameView.classList.add("hidden");
