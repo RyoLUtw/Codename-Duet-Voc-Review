@@ -31,6 +31,7 @@
     competeDeviceModes: document.querySelectorAll("input[name='compete-device-mode']"),
     timerCount: document.querySelector("#timer-count"),
     firstGiver: document.querySelector("#first-giver"),
+    tvMode: document.querySelector("#tv-mode"),
     startingTeam: document.querySelector("#starting-team"),
     board: document.querySelector("#board"),
     boardSource: document.querySelector("#board-source"),
@@ -219,6 +220,7 @@
       guessLimit: null,
       pendingBystander: null,
       deviceMode: mode === "coop" ? selectedDeviceMode() : selectedCompeteDeviceMode(),
+      tvMode: mode === "coop" && dom.tvMode.checked,
       log: []
     };
   }
@@ -894,6 +896,7 @@
     dom.competitiveKeyTimer.classList.add("hidden");
     stopKeyTimer();
     dom.keyRevealStep.classList.toggle("competitive-key", state.mode === "compete");
+    dom.keyRevealStep.classList.toggle("tv-mode", state.tvMode);
     dom.keyAlignStep.classList.toggle("competitive-privacy-step", state.mode === "compete");
     dom.keyAlignStep.classList.remove("hidden");
     dom.keyRevealStep.classList.add("hidden");
