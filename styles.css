@@ -465,7 +465,7 @@ select:focus {
   align-items: end;
   display: grid;
   gap: 0.7rem;
-  grid-template-columns: 1fr 82px auto;
+  grid-template-columns: 1fr 82px auto auto;
 }
 
 .number-field input {
@@ -919,6 +919,85 @@ dialog::backdrop {
   line-height: 1.5;
 }
 
+.solo-setup-dialog,
+.solo-clues-dialog,
+.solo-luck-dialog,
+.solo-clue-complete-dialog {
+  line-height: 1.5;
+  width: min(94vw, 640px);
+}
+
+.solo-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.solo-tools .quiet {
+  flex: 1 1 240px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.solo-clues-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 0 0;
+  padding-left: 1.4rem;
+}
+
+.solo-clues-list li {
+  background: #f3efe5;
+  border-radius: 7px;
+  padding: 0;
+}
+
+.solo-clues-list li.complete {
+  opacity: 0.58;
+}
+
+.solo-clue-option {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  display: grid;
+  gap: 0.2rem;
+  justify-items: start;
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.solo-clue-option:not(:disabled):hover {
+  background: var(--sage);
+}
+
+.solo-clue-option:disabled {
+  cursor: default;
+}
+
+.solo-clue-option span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.skip-turn-dialog {
+  line-height: 1.5;
+}
+
+.skip-turn-dialog p {
+  color: var(--muted);
+  margin-top: 1rem;
+}
+
 .rules-dialog ul {
   color: #3b463d;
   display: grid;
@@ -1084,6 +1163,10 @@ a {
   }
 
   .clue-form button {
+    grid-column: auto;
+  }
+
+  .clue-form #begin-guesses {
     grid-column: 1 / -1;
   }
 
