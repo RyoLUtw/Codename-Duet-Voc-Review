@@ -22,7 +22,7 @@
           <h2>Use your own vocabulary</h2>
           <p>
             Paste vocabulary or upload a <code>.txt</code> or <code>.csv</code> file.
-            The board always needs 25 unique entries. Missing entries are randomly filled
+            Choose board dimensions from 1 to 8 rows and columns, with at least 5 words. Missing entries are randomly filled
             from a built-in pool of 100 lower-intermediate and intermediate English words.
           </p>
         </div>
@@ -38,6 +38,40 @@
               <input id="vocab-file" type="file" accept=".txt,.csv,text/plain,text/csv">
             </label>
             <p id="word-count" class="quiet">No custom entries yet. The learning pool will supply all 25 words.</p>
+          </div>
+          <div class="board-size-tools">
+            <label class="field compact">
+              <span>Rows</span>
+              <select id="board-rows">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5" selected>5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label class="field compact">
+              <span>Columns</span>
+              <select id="board-columns">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5" selected>5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label class="field compact">
+              <span>Target words</span>
+              <input id="target-word-count" type="number" min="5" max="64" placeholder="25">
+            </label>
+            <button class="secondary" id="suggest-board-size" type="button">Suggest size</button>
+            <p id="board-size-hint" class="quiet">Standard 5 x 5 uses 25 words.</p>
           </div>
           <fieldset class="mode-switch" aria-label="Game mode">
             <legend>Game mode</legend>
@@ -113,7 +147,7 @@
               </label>
             </div>
           </div>
-          <button class="primary" type="submit">Create 5 x 5 Mission</button>
+          <button class="primary" id="create-mission" type="submit">Create 5 x 5 Mission</button>
         </form>
       </section>
 
@@ -129,7 +163,7 @@
               <div id="phase-pill" class="phase-pill">Clue</div>
             </div>
             <div class="scores">
-              <div><strong id="agents-found">0</strong><span>of 15 agents</span></div>
+              <div><strong id="agents-found">0</strong><span>agents</span></div>
               <div><strong id="tokens-left">9</strong><span>turns left</span></div>
               <div><strong id="custom-used">0</strong><span>custom words</span></div>
             </div>
@@ -340,14 +374,14 @@
         <button id="rules-close" class="text-button" type="button">Close</button>
       </div>
       <ul>
-        <li>Coop mode follows Codenames: Duet: 25 words, two private key sides, 15 shared agents, timer tokens, and sudden death.</li>
+        <li>Coop mode follows Codenames: Duet with two private key sides, scaled shared agents, timer tokens, and sudden death.</li>
         <li>For coop one-device play, place a paper screen on the center line before revealing the opposite-facing key sides.</li>
         <li>For coop multi-device play, scan Side A and Side B QR codes to show private keys on separate phones.</li>
-        <li>Compete mode follows standard Codenames: two teams use one shared spymaster key, with the starting team having 9 agents and the other team having 8.</li>
+        <li>Compete mode follows standard Codenames: two teams use one shared spymaster key, with the starting team having one more agent than the other team.</li>
         <li>For compete one-device play, guessing players should turn around, cover their eyes, or step away before the spymasters reveal the shared key.</li>
         <li>The competitive one-device key display includes a countdown timer that can be adjusted in 30-second steps, paused, continued, and reset.</li>
         <li>For compete multi-device play, scan the spymaster QR code to show the shared key on a separate phone.</li>
-        <li>Solo mode creates one hidden key with 15 agents, 7 bystanders, and 3 assassins. Copy the role string to an AI chatbot, import CSV clues with associated contact words, then guess from the board.</li>
+        <li>Solo mode creates one hidden key with scaled agents, bystanders, and assassins. Copy the role string to an AI chatbot, import CSV clues with associated contact words, then guess from the board.</li>
         <li>In either mode, a clue is one word plus a number. Guessers must make at least one guess, then may stop if the turn is still active.</li>
         <li>In compete mode, your team's agent lets you keep guessing, a bystander ends the turn, an opponent agent scores for the opponent and ends the turn, and the assassin makes your team lose immediately.</li>
         <li>In coop mode, a green guess is contacted and guessing may continue. A bystander ends the turn. An assassin loses immediately.</li>

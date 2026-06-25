@@ -24,6 +24,12 @@
     vocabInput: document.querySelector("#vocab-input"),
     vocabFile: document.querySelector("#vocab-file"),
     wordCount: document.querySelector("#word-count"),
+    boardRows: document.querySelector("#board-rows"),
+    boardColumns: document.querySelector("#board-columns"),
+    targetWordCount: document.querySelector("#target-word-count"),
+    suggestBoardSize: document.querySelector("#suggest-board-size"),
+    boardSizeHint: document.querySelector("#board-size-hint"),
+    createMission: document.querySelector("#create-mission"),
     gameModes: document.querySelectorAll("input[name='game-mode']"),
     coopSettings: document.querySelector("#coop-settings"),
     competeSettings: document.querySelector("#compete-settings"),
@@ -99,6 +105,9 @@
   let keyTimerRemaining = 60;
   let keyTimerPaused = true;
   let qrCodesCollapsed = false;
+  const MIN_TARGET_WORDS = 5;
+  const MIN_BOARD_DIMENSION = 1;
+  const MAX_BOARD_DIMENSION = 8;
 
   function shuffle(items) {
     const copy = [...items];
@@ -129,59 +138,220 @@
     return word.trim().toLocaleLowerCase();
   }
 
-  function updateCustomCount() {
-    const count = uniqueEntries(dom.vocabInput.value).length;
-    if (!count) {
-      dom.wordCount.textContent = "No custom entries yet. The learning pool will supply all 25 words.";
-      return;
+  function clampDimension(value, fallback = 5) {
+    const number = Number.parseInt(value, 10);
+    if (!Number.isFinite(number)) {
+      return fallback;
     }
-    const fill = Math.max(25 - count, 0);
-    const detail = fill ? `${fill} pool word${fill === 1 ? "" : "s"} will be added.` : "25 entries will be selected.";
-    dom.wordCount.textContent = `${count} unique custom entr${count === 1 ? "y" : "ies"} found. ${detail}`;
+    return Math.min(Math.max(number, MIN_BOARD_DIMENSION), MAX_BOARD_DIMENSION);
   }
 
-  function createKey() {
-    const spots = shuffle(Array.from({ length: 25 }, (_, index) => index));
-    const sideA = Array(25).fill("bystander");
-    const sideB = Array(25).fill("bystander");
+  function selectedDimensions() {
+    return normalizeDimensions({
+      rows: clampDimension(dom.boardRows.value),
+      columns: clampDimension(dom.boardColumns.value)
+    });
+  }
 
-    spots.slice(0, 3).forEach((index) => {
+  function normalizeDimensions(dimensions) {
+    const rows = clampDimension(dimensions.rows);
+    let columns = clampDimension(dimensions.columns);
+    if (rows * columns < MIN_TARGET_WORDS) {
+      columns = Math.min(MAX_BOARD_DIMENSION, Math.ceil(MIN_TARGET_WORDS / rows));
+    }
+    return { rows, columns };
+  }
+
+  function syncSelectedDimensions() {
+    const dimensions = selectedDimensions();
+    dom.boardRows.value = String(dimensions.rows);
+    dom.boardColumns.value = String(dimensions.columns);
+    return dimensions;
+  }
+
+  function boardTotal(dimensions = selectedDimensions()) {
+    return dimensions.rows * dimensions.columns;
+  }
+
+  function boardConfig(dimensions = selectedDimensions()) {
+    const rows = dimensions.rows;
+    const columns = dimensions.columns;
+    const total = boardTotal(dimensions);
+    const coopSharedAgents = Math.max(1, Math.round(total * 3 / 25));
+    const coopSideAgents = Math.max(1, Math.round(total * 6 / 25));
+    const coopAgentTarget = coopSharedAgents + (coopSideAgents * 2);
+    const coopAssassinsPerSide = Math.max(1, Math.round(total * 3 / 25));
+    const competeStartingAgents = Math.max(2, Math.round(total * 9 / 25));
+    const competeOtherAgents = Math.max(1, competeStartingAgents - 1);
+    const competeAssassins = Math.max(1, Math.round(total / 25));
+    const soloAgents = Math.max(2, Math.round(total * 15 / 25));
+    const soloAssassins = Math.max(1, Math.round(total * 3 / 25));
+
+    return {
+      rows,
+      columns,
+      total,
+      coopSharedAgents,
+      coopSideAgents,
+      coopAgentTarget,
+      coopAssassinsPerSide,
+      competeStartingAgents,
+      competeOtherAgents,
+      competeAssassins,
+      competeBystanders: Math.max(total - competeStartingAgents - competeOtherAgents - competeAssassins, 0),
+      soloAgents,
+      soloAssassins,
+      soloBystanders: Math.max(total - soloAgents - soloAssassins, 0)
+    };
+  }
+
+  function applyGridSize(grid, dimensions = state ? state.dimensions : selectedDimensions()) {
+    if (grid) {
+      grid.style.setProperty("--board-columns", String(dimensions.columns));
+    }
+  }
+
+  function updateCustomCount() {
+    const count = uniqueEntries(dom.vocabInput.value).length;
+    const total = boardTotal();
+    if (!count) {
+      dom.wordCount.textContent = `No custom entries yet. The learning pool will supply all ${total} words.`;
+      updateBoardSizeHint();
+      return;
+    }
+    const fill = Math.max(total - count, 0);
+    const detail = fill ? `${fill} pool word${fill === 1 ? "" : "s"} will be added.` : `${total} entries will be selected.`;
+    dom.wordCount.textContent = `${count} unique custom entr${count === 1 ? "y" : "ies"} found. ${detail}`;
+    updateBoardSizeHint();
+  }
+
+  function updateBoardSizeHint() {
+    const config = boardConfig(syncSelectedDimensions());
+    updateTimerTokenOptions(config);
+    dom.boardSizeHint.textContent = `${config.rows} x ${config.columns} uses ${config.total} words. Coop has ${config.coopAgentTarget} agents; compete uses ${config.competeStartingAgents}/${config.competeOtherAgents} team agents; solo has ${config.soloAgents} agents.`;
+    dom.createMission.textContent = `Create ${config.rows} x ${config.columns} Mission`;
+    const redOption = dom.startingTeam.querySelector("option[value='red']");
+    const blueOption = dom.startingTeam.querySelector("option[value='blue']");
+    redOption.textContent = `Red - ${config.competeStartingAgents} agents`;
+    blueOption.textContent = `Blue - ${config.competeStartingAgents} agents`;
+  }
+
+  function standardTimerTokens(config) {
+    return Math.max(1, Math.round(config.coopAgentTarget * 9 / 15));
+  }
+
+  function updateTimerTokenOptions(config) {
+    const selectedIndex = dom.timerCount.selectedIndex >= 0 ? dom.timerCount.selectedIndex : 0;
+    const standard = standardTimerTokens(config);
+    const options = [
+      { value: standard, label: "Standard" },
+      { value: standard + 1, label: "Relaxed" },
+      { value: standard + 2, label: "Classroom practice" }
+    ];
+    dom.timerCount.innerHTML = "";
+    options.forEach((option, index) => {
+      const item = document.createElement("option");
+      item.value = String(option.value);
+      item.textContent = `${option.value} - ${option.label}`;
+      item.selected = index === Math.min(selectedIndex, options.length - 1);
+      dom.timerCount.append(item);
+    });
+  }
+
+  function suggestBoardSize() {
+    const explicitTarget = Number.parseInt(dom.targetWordCount.value, 10);
+    const customCount = uniqueEntries(dom.vocabInput.value).length;
+    const targetSource = Number.isFinite(explicitTarget) && explicitTarget > 0 ? explicitTarget : customCount || 25;
+    const target = Math.min(Math.max(targetSource, MIN_TARGET_WORDS), MAX_BOARD_DIMENSION * MAX_BOARD_DIMENSION);
+    const suggested = suggestDimensions(target);
+    dom.boardRows.value = String(suggested.rows);
+    dom.boardColumns.value = String(suggested.columns);
+    dom.targetWordCount.value = String(target);
+    updateCustomCount();
+  }
+
+  function suggestDimensions(target) {
+    const candidates = [];
+    for (let rows = MIN_BOARD_DIMENSION; rows <= MAX_BOARD_DIMENSION; rows += 1) {
+      for (let columns = MIN_BOARD_DIMENSION; columns <= MAX_BOARD_DIMENSION; columns += 1) {
+        const total = rows * columns;
+        if (total < target) {
+          continue;
+        }
+        candidates.push({
+          rows,
+          columns,
+          total,
+          extra: total - target,
+          aspect: Math.abs((Math.max(rows, columns) / Math.min(rows, columns)) - 1)
+        });
+      }
+    }
+    const fallback = { rows: MAX_BOARD_DIMENSION, columns: MAX_BOARD_DIMENSION };
+    if (!candidates.length) {
+      return fallback;
+    }
+    candidates.sort((a, b) =>
+      a.extra - b.extra ||
+      a.aspect - b.aspect ||
+      a.total - b.total ||
+      a.rows - b.rows ||
+      b.columns - a.columns
+    );
+    const best = candidates[0];
+    return best.rows <= best.columns
+      ? { rows: best.rows, columns: best.columns }
+      : { rows: best.columns, columns: best.rows };
+  }
+
+  function createKey(config) {
+    const spots = shuffle(Array.from({ length: config.total }, (_, index) => index));
+    const sideA = Array(config.total).fill("bystander");
+    const sideB = Array(config.total).fill("bystander");
+    const shared = spots.slice(0, config.coopSharedAgents);
+    const sideAOnly = spots.slice(config.coopSharedAgents, config.coopSharedAgents + config.coopSideAgents);
+    const sideBOnly = spots.slice(config.coopSharedAgents + config.coopSideAgents, config.coopAgentTarget);
+    const neutral = spots.slice(config.coopAgentTarget);
+
+    shared.forEach((index) => {
       sideA[index] = "agent";
       sideB[index] = "agent";
     });
-    spots.slice(3, 9).forEach((index) => {
+    sideAOnly.forEach((index) => {
       sideA[index] = "agent";
     });
-    spots.slice(9, 15).forEach((index) => {
+    sideBOnly.forEach((index) => {
       sideB[index] = "agent";
     });
 
-    sideB[spots[3]] = "assassin";
-    sideA[spots[9]] = "assassin";
-    sideA[spots[15]] = "assassin";
-    sideB[spots[15]] = "assassin";
-    sideA[spots[16]] = "assassin";
-    sideB[spots[17]] = "assassin";
+    const sideAAssassins = [...shuffle(sideBOnly), ...neutral].slice(0, config.coopAssassinsPerSide);
+    const sideBAssassins = [...shuffle(sideAOnly), ...neutral].slice(0, config.coopAssassinsPerSide);
+    sideAAssassins.forEach((index) => {
+      sideA[index] = "assassin";
+    });
+    sideBAssassins.forEach((index) => {
+      sideB[index] = "assassin";
+    });
 
     return { A: sideA, B: sideB };
   }
 
-  function createCompetitiveKey(startingTeam) {
+  function createCompetitiveKey(startingTeam, config) {
     const otherTeam = startingTeam === "red" ? "blue" : "red";
     const roles = [
-      ...Array(9).fill(startingTeam),
-      ...Array(8).fill(otherTeam),
-      "assassin",
-      ...Array(7).fill("bystander")
+      ...Array(config.competeStartingAgents).fill(startingTeam),
+      ...Array(config.competeOtherAgents).fill(otherTeam),
+      ...Array(config.competeAssassins).fill("assassin"),
+      ...Array(config.competeBystanders).fill("bystander")
     ];
     return shuffle(roles);
   }
 
-  function createSoloKey() {
+  function createSoloKey(config) {
     return shuffle([
-      ...Array(15).fill("agent"),
-      ...Array(7).fill("bystander"),
-      ...Array(3).fill("assassin")
+      ...Array(config.soloAgents).fill("agent"),
+      ...Array(config.soloBystanders).fill("bystander"),
+      ...Array(config.soloAssassins).fill("assassin")
     ]);
   }
 
@@ -213,10 +383,11 @@
   }
 
   function buildMission(customEntries) {
-    const selectedCustom = shuffle(customEntries).slice(0, 25);
+    const config = boardConfig();
+    const selectedCustom = shuffle(customEntries).slice(0, config.total);
     const customKeys = new Set(selectedCustom.map((word) => word.toLocaleLowerCase()));
     const fillers = shuffle(WORD_POOL.filter((word) => !customKeys.has(word.toLocaleLowerCase())))
-      .slice(0, 25 - selectedCustom.length);
+      .slice(0, config.total - selectedCustom.length);
     const board = shuffle([...selectedCustom, ...fillers]);
     const mode = selectedGameMode();
     const timerLimit = Number(dom.timerCount.value);
@@ -224,11 +395,19 @@
     state = {
       mode,
       board,
+      dimensions: {
+        rows: config.rows,
+        columns: config.columns
+      },
+      boardRows: config.rows,
+      boardColumns: config.columns,
+      boardTotal: config.total,
+      targets: config,
       customCount: selectedCustom.length,
       poolCount: fillers.length,
-      keys: mode === "coop" ? createKey() : null,
-      soloKey: mode === "solo" ? createSoloKey() : null,
-      competitiveKey: mode === "compete" ? createCompetitiveKey(dom.startingTeam.value) : null,
+      keys: mode === "coop" ? createKey(config) : null,
+      soloKey: mode === "solo" ? createSoloKey(config) : null,
+      competitiveKey: mode === "compete" ? createCompetitiveKey(dom.startingTeam.value, config) : null,
       startingTeam: mode === "compete" ? dom.startingTeam.value : null,
       activeTeam: mode === "compete" ? dom.startingTeam.value : null,
       contacted: new Set(),
@@ -338,6 +517,8 @@
     const payload = {
       mode: state.mode,
       side: compete ? "spymaster" : side,
+      boardRows: state.boardRows,
+      boardColumns: state.boardColumns,
       words: state.board,
       roles: compete ? state.competitiveKey.map(roleCode).join("") : state.keys[side].map(roleCode).join("")
     };
@@ -442,6 +623,7 @@
   function renderBoard() {
     const visibleBystanders = state.mode === "coop" ? state.bystanders[state.clueGiver] || new Set() : new Set();
     dom.board.innerHTML = "";
+    applyGridSize(dom.board);
     state.board.forEach((word, index) => {
       const card = document.createElement("button");
       const classes = ["word-card"];
@@ -524,6 +706,10 @@
     return [...state.revealed].filter((index) => state.competitiveKey[index] === team).length;
   }
 
+  function teamTarget(team) {
+    return state.startingTeam === team ? state.targets.competeStartingAgents : state.targets.competeOtherAgents;
+  }
+
   function teamName(team) {
     return team === "red" ? "Red" : "Blue";
   }
@@ -567,23 +753,23 @@
     const compete = state.mode === "compete";
     const solo = state.mode === "solo";
     if (solo) {
-      dom.agentsFound.textContent = `${state.contacted.size}/15`;
+      dom.agentsFound.textContent = `${state.contacted.size}/${state.targets.soloAgents}`;
       dom.agentsFound.nextElementSibling.textContent = "agents contacted";
       dom.tokensLeft.textContent = String(Math.max(state.alarmLimit - state.alarms, 0));
       dom.tokensLeft.nextElementSibling.textContent = "alarms left";
     } else if (compete) {
-      dom.agentsFound.textContent = `${competitiveFound("red")}/${state.startingTeam === "red" ? 9 : 8}`;
+      dom.agentsFound.textContent = `${competitiveFound("red")}/${teamTarget("red")}`;
       dom.agentsFound.nextElementSibling.textContent = "red agents";
-      dom.tokensLeft.textContent = `${competitiveFound("blue")}/${state.startingTeam === "blue" ? 9 : 8}`;
+      dom.tokensLeft.textContent = `${competitiveFound("blue")}/${teamTarget("blue")}`;
       dom.tokensLeft.nextElementSibling.textContent = "blue agents";
     } else {
       dom.agentsFound.textContent = String(state.contacted.size);
-      dom.agentsFound.nextElementSibling.textContent = "of 15 agents";
+      dom.agentsFound.nextElementSibling.textContent = `of ${state.targets.coopAgentTarget} agents`;
       dom.tokensLeft.textContent = String(state.tokens);
       dom.tokensLeft.nextElementSibling.textContent = "turns left";
     }
     dom.customUsed.textContent = String(state.customCount);
-    dom.boardSource.textContent = `${state.customCount} custom word${state.customCount === 1 ? "" : "s"} and ${state.poolCount} learning-pool word${state.poolCount === 1 ? "" : "s"} on this board.`;
+    dom.boardSource.textContent = `${state.boardRows} x ${state.boardColumns} board: ${state.customCount} custom word${state.customCount === 1 ? "" : "s"} and ${state.poolCount} learning-pool word${state.poolCount === 1 ? "" : "s"}.`;
     dom.clueForm.classList.toggle("hidden", solo || state.phase !== "clue");
     dom.guessActions.classList.toggle("hidden", !normalGuess);
     dom.suddenControls.classList.toggle("hidden", compete || state.phase !== "sudden");
@@ -632,7 +818,7 @@
       dom.turnGuidance.textContent = compete
         ? "Start a new game from the vocabulary screen."
         : state.phase === "won"
-          ? "All 15 agents were contacted."
+          ? `All ${state.mode === "solo" ? state.targets.soloAgents : state.targets.coopAgentTarget} agents were contacted.`
           : "Start a new mission to try again.";
       dom.phasePill.textContent = state.phase === "won" ? "Success" : "Game over";
     }
@@ -774,8 +960,9 @@
       logEvent(`${teamName(state.activeTeam)} contacted all agents.`);
       showBanner(`${teamName(state.activeTeam)} team wins.`);
     } else {
-      logEvent("All 15 agents contacted.");
-      showBanner("Mission complete: all 15 agents contacted.");
+      const target = state.mode === "solo" ? state.targets.soloAgents : state.targets.coopAgentTarget;
+      logEvent(`All ${target} agents contacted.`);
+      showBanner(`Mission complete: all ${target} agents contacted.`);
     }
   }
 
@@ -826,7 +1013,7 @@
     if (result === "agent") {
       state.contacted.add(index);
       logEvent(`${word}: agent contacted.`);
-      if (state.contacted.size === 15) {
+      if (state.contacted.size === state.targets.coopAgentTarget) {
         succeed();
       }
     } else if (result === "assassin") {
@@ -863,11 +1050,11 @@
         const activeClueComplete = soloClueContactCount(activeClue) === activeClue.contacts.length;
         if (!matchesActiveClue) {
           dom.soloLuckDialog.showModal();
-        } else if (activeClueComplete && state.contacted.size < 15) {
+        } else if (activeClueComplete && state.contacted.size < state.targets.soloAgents) {
           dom.soloClueCompleteDialog.showModal();
         }
       }
-      if (state.contacted.size === 15) {
+      if (state.contacted.size === state.targets.soloAgents) {
         succeed();
       }
     } else if (result === "assassin") {
@@ -898,14 +1085,14 @@
 
     if (result === team) {
       logEvent(`${word}: ${teamName(team)} agent found.`);
-      if (competitiveFound(team) === (state.startingTeam === team ? 9 : 8)) {
+      if (competitiveFound(team) === teamTarget(team)) {
         succeed();
       } else if (state.guessesThisTurn >= state.guessLimit) {
         spendTurn(`${teamName(team)} reached the clue limit. Turn ended.`);
       }
     } else if (result === opponent) {
       logEvent(`${word}: ${teamName(opponent)} agent revealed.`);
-      if (competitiveFound(opponent) === (state.startingTeam === opponent ? 9 : 8)) {
+      if (competitiveFound(opponent) === teamTarget(opponent)) {
         state.activeTeam = opponent;
         succeed();
       } else {
@@ -952,6 +1139,7 @@
 
   function renderKeyGrid(grid, side) {
     grid.innerHTML = "";
+    applyGridSize(grid);
     state.board.forEach((word, index) => {
       const result = state.mode === "compete" ? state.competitiveKey[index] : state.keys[side][index];
       const hideContactedWord = state.mode === "compete"
@@ -1004,6 +1192,12 @@
     dom.phoneKeyView.classList.remove("hidden");
     const compete = payload.mode === "compete";
     dom.phoneKeyTitle.textContent = compete ? "Spymaster key" : `Side ${payload.side} key`;
+    const phoneRows = payload.boardRows || payload.boardSize || Math.round(Math.sqrt(payload.words.length)) || 5;
+    const phoneColumns = payload.boardColumns || payload.boardSize || Math.ceil(payload.words.length / phoneRows) || 5;
+    applyGridSize(dom.phoneKeyGrid, {
+      rows: clampDimension(phoneRows),
+      columns: clampDimension(phoneColumns)
+    });
     const legend = dom.phoneKeyView.querySelector(".legend");
     legend.innerHTML = compete
       ? `
@@ -1292,6 +1486,9 @@
 
   dom.gameModes.forEach((input) => input.addEventListener("change", updateModeSettings));
   dom.vocabInput.addEventListener("input", updateCustomCount);
+  dom.boardRows.addEventListener("change", updateCustomCount);
+  dom.boardColumns.addEventListener("change", updateCustomCount);
+  dom.suggestBoardSize.addEventListener("click", suggestBoardSize);
   dom.vocabFile.addEventListener("change", async (event) => {
     const file = event.target.files[0];
     if (!file) {
