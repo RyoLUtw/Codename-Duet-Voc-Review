@@ -544,7 +544,6 @@ select:focus {
   min-height: clamp(58px, 8vw, 78px);
   overflow: hidden;
   padding: 0.42rem 0.22rem;
-  text-transform: uppercase;
   transition: transform 120ms ease, background 120ms ease;
 }
 
@@ -872,7 +871,6 @@ dialog::backdrop {
   overflow: hidden;
   padding: 0.24rem;
   text-align: center;
-  text-transform: uppercase;
 }
 
 .key-label {
